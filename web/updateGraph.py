@@ -65,8 +65,70 @@ class LinkInfo:
         self.b = b  # NodeInfo
 
 
+def node_label(entry, default):
+    """Label from NodeInfo 'name' if present and sane, html-escaped."""
+    label = default
+    try:
+        name = entry.get('nodeinfo', {}).get('name')
+        if name is not None and len(str(name)) <= 64:
+            label = str(name)
+    except Exception:
+        pass
+    return html.escape(label)
+
+
+def build_peer_graph(data):
+    """Nodes and undirected edges from crawler output with 'peers' lists."""
+    nodes = dict()
+
+    def get_node(key):
+        if key not in nodes:
+            entry = data.get(key, {})
+            address = entry.get('address') or address_for_key(key)
+            info = NodeInfo(address, '')
+            info.label = node_label(entry, info.label)
+            nodes[key] = info
+        return nodes[key]
+
+    edges = dict()
+    for key, entry in data.items():
+        a = get_node(key)
+        for peer in entry.get('peers') or []:
+            if peer == key:
+                continue
+            b = get_node(peer)
+            edges[tuple(sorted((key, peer)))] = LinkInfo(a, b)
+    return {n.ip: n for n in nodes.values()}, list(edges.values())
+
+
+def address_for_key(key_hex):
+    """Port of yggdrasil-go src/address/address.go AddrForKey."""
+    buf = bytes(~b & 0xFF for b in bytes.fromhex(key_hex))
+    done, ones, bits, nbits, temp = False, 0, 0, 0, bytearray()
+    for idx in range(8 * len(buf)):
+        bit = (buf[idx // 8] >> (7 - idx % 8)) & 1
+        if not done and bit:
+            ones += 1
+            continue
+        if not done and not bit:
+            done = True
+            continue
+        bits = ((bits << 1) | bit) & 0xFF
+        nbits += 1
+        if nbits == 8:
+            nbits = 0
+            temp.append(bits)
+    return str(ipaddress.IPv6Address((bytes([0x02, ones]) + bytes(temp))[:16]))
+
+
 def generate_graph(time_limit=60*60*3):
     data = json.loads(read_source(url))["yggnodes"]
+
+    if any('peers' in entry for entry in data.values()):
+        # Crawler output (scripts/crawl-peers.py): draw the real peering graph
+        nodes, edges = build_peer_graph(data)
+        write_graph(nodes, edges)
+        return
 
     toAdd = []
     for key in data:
@@ -75,15 +137,7 @@ def generate_graph(time_limit=60*60*3):
         ip = data[key]['address']
         coords = data[key]['coords']
         info = NodeInfo(ip, coords)
-        try:
-            if 'nodeinfo' in data[key]:
-                if 'name' in data[key]['nodeinfo']:
-                    label = str(data[key]['nodeinfo']['name'])
-                    if len(label) <= 64:
-                        info.label = label
-        except Exception:
-            pass
-        info.label = html.escape(info.label)
+        info.label = node_label(data[key], info.label)
         toAdd.append(info)
 
     nodes = dict()
@@ -110,6 +164,10 @@ def generate_graph(time_limit=60*60*3):
             continue  # root has no parent
         edges.append(LinkInfo(node, nodes[node.getParent()]))
 
+    write_graph(nodes, edges)
+
+
+def write_graph(nodes, edges):
     print('%d nodes, %d edges' % (len(nodes), len(edges)))
 
     graph = graphPlotter.position_nodes(nodes, edges)

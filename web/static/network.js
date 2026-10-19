@@ -204,7 +204,7 @@ function showNodeInfo(node) {
         '<h2>' + node.label + '</h2>' +
         '<span class="tt">' + node.id + '</span><br>' +
         '<br>' +
-        '<strong>Coords:</strong> ' + node.coords + '<br>' +
+        (node.coords ? '<strong>Coords:</strong> ' + node.coords + '<br>' : '') +
         '<strong>Peers:</strong> ' + node.peers.length + '<br>' +
         '<strong>Centrality:</strong> ' + node.centrality + '<br>' +
         '<strong>Address height:</strong> ' + (node.height == null ? 'unknown' : node.height) + '<br>' +
@@ -245,8 +245,6 @@ $(document).ready(function() {
         // Calculate node radiuses
         for (var i = 0; i < nodes.length; ++i) {
             var node = nodes[i];
-            node.x = node.x * 1.2;
-            node.y = node.y * 1.2;
             node.radius = node.size;
             node.hover = false;
             node.selected = false;
@@ -260,6 +258,7 @@ $(document).ready(function() {
             node.textColor = node.color;
         }
         computeHeightRange();
+        fitToView();
 
         var newEdges = []
         // Find node references for edges
@@ -449,7 +448,7 @@ $(document).ready(function() {
             // node.x *= ratio;
             // node.y *= ratio;
             // node.radius *= ratio;
-            node.radius = (node.size) * zoom;
+            node.radius = nodeRadius(node);
         }
 
         drawNetwork();
@@ -537,4 +536,36 @@ function setColorMode(mode) {
     } catch (e) { /* storage unavailable, mode just won't persist */ }
     applyColorMode();
     drawNetwork();
+}
+
+// Minimum on-screen dot size, so large graphs stay visible when zoomed out
+function nodeRadius(node) {
+    return Math.max(1.5, node.size * zoom);
+}
+
+// Centre the layout on the canvas. Graphs up to 300 nodes keep the original
+// 1.2x scale; larger ones (sfdp layouts span tens of thousands of points) are
+// shrunk to fit, with labels appearing as you zoom in.
+function fitToView() {
+    if (nodes.length == 0)
+        return;
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (var i = 0; i < nodes.length; ++i) {
+        minX = Math.min(minX, nodes[i].x); maxX = Math.max(maxX, nodes[i].x);
+        minY = Math.min(minY, nodes[i].y); maxY = Math.max(maxY, nodes[i].y);
+    }
+    var pad = 40;
+    var w = Math.max(1, maxX - minX), h = Math.max(1, maxY - minY);
+    var scale = 1.2;  // original scale, labels readable
+    if (nodes.length > 300)
+        scale = Math.min((canvas.width - 2 * pad) / w, (canvas.height - 2 * pad) / h, 1.2);
+    var offX = (canvas.width - w * scale) / 2 - mapOffset.x;
+    var offY = (canvas.height - h * scale) / 2 - mapOffset.y;
+    zoom = scale / 1.2;
+    for (var i = 0; i < nodes.length; ++i) {
+        var node = nodes[i];
+        node.x = (node.x - minX) * scale + offX;
+        node.y = (node.y - minY) * scale + offY;
+        node.radius = nodeRadius(node);
+    }
 }

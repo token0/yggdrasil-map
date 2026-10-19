@@ -5,6 +5,7 @@ services:
     restart: unless-stopped
     environment:
       YGG_PEERS: ${YGG_PEERS}
+      COLLECTOR: ${COLLECTOR:-crawl}
       UPDATE_INTERVAL: ${UPDATE_INTERVAL}
     volumes:
       # Stack directory: yggdrasil.conf is generated here on first start

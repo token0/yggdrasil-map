@@ -38,8 +38,14 @@ The choice is remembered in the browser.
 ## Web server with Docker
 
 The image runs its own yggdrasil node (official release binary) and collects
-data from it with the `lookups` admin request, re-rendering every
-`UPDATE_INTERVAL` seconds.
+data through it, re-rendering every `UPDATE_INTERVAL` seconds. Two collectors:
+
+  * `crawl` (default, [`scripts/crawl-peers.py`](scripts/crawl-peers.py)) –
+    breadth-first crawl with `debug_remoteGetPeers` (+ `getNodeInfo` for names),
+    rendering the real peering graph. Works from any position in the tree.
+  * `lookups` ([`scripts/getcurrent.py`](scripts/getcurrent.py)) – the original
+    spanning-tree view from the node's `lookups` log. Only useful on a hub node:
+    lookups travel down the tree towards their target, so a leaf sees almost none.
 
 On first start a config is generated at `/config/yggdrasil.conf` (mode 0600,
 contains the node's private key). It is contained by default:
@@ -51,8 +57,7 @@ contains the node's private key). It is contained by default:
 
 The file is yours afterwards (HJSON or JSON) and is never rewritten; the
 container only enforces `LogLookups: true` and its internal admin socket at
-runtime. Note that `lookups` only records lookups that pass through this node,
-so a leaf node sees a small part of the network.
+runtime.
 
 ### Compose (e.g. Dockge)
 Use [`contrib/docker/compose.yaml`](contrib/docker/compose.yaml) together with
@@ -63,6 +68,9 @@ The image is built and pushed to `ghcr.io/<owner>/yggdrasil-map` by the
 
 ### Environment
 `HOST`, `PORT`, `UPDATE_INTERVAL` (default 600), `YGG_PEERS`,
+`COLLECTOR` (`crawl` or `lookups`), `CRAWL_CONCURRENCY` (default 16),
+`CRAWL_MAX_NODES` (default 0 = unlimited), `CRAWL_NODEINFO` (default 1),
+`LAYOUT_PROG` (default neato up to 500 nodes, sfdp above),
 `YGG_EMBEDDED` (default 1; 0 to use an external node via `YGG_ADMIN_ENDPOINT`,
 `unix:///path` or `tcp://host:port`), `YGG_CONF` (default
 `/config/yggdrasil.conf`), `YGG_WARMUP` (seconds before the first collection,

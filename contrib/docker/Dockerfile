@@ -26,7 +26,7 @@ RUN python3 -c "import urllib.request, sys; urllib.request.urlretrieve(sys.argv[
     yggdrasil -version
 
 COPY web/ ./
-COPY scripts/getcurrent.py /src/yggdrasil-map/scripts/getcurrent.py
+COPY scripts/getcurrent.py scripts/crawl-peers.py /src/yggdrasil-map/scripts/
 COPY contrib/docker/web_config.cfg ./web_config.cfg
 COPY contrib/docker/ygg-config.py /usr/local/bin/ygg-config
 COPY contrib/docker/entrypoint.sh /usr/bin/entrypoint.sh

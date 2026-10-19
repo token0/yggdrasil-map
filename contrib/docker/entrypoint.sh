@@ -10,10 +10,13 @@
 #   YGG_ADMIN_ENDPOINT    admin endpoint to collect from; defaults to the embedded node's socket.
 #                         Set to empty with YGG_EMBEDDED=0 to only render CURRENT_SOURCE.
 #   YGG_WARMUP            seconds to wait before the first collection (default 60 with the embedded node)
+#   COLLECTOR             crawl = peering graph via debug_remoteGetPeers (default),
+#                         lookups = spanning tree from the node's 'lookups' log
 #   CURRENT_SOURCE        crawler output to render (file path or URL), default: current
 #   UPDATE_INTERVAL       seconds between updates, default: 600
 
 APP_DIR="${APP_DIR:-/src/yggdrasil-map}"
+COLLECTOR="${COLLECTOR:-crawl}"
 UPDATE_INTERVAL="${UPDATE_INTERVAL:-600}"
 YGG_EMBEDDED="${YGG_EMBEDDED:-1}"
 YGG_CONF="${YGG_CONF:-/config/yggdrasil.conf}"
@@ -42,7 +45,11 @@ cd "$APP_DIR/web" || exit 1
 
 update() {
     if [ -n "$YGG_ADMIN_ENDPOINT" ]; then
-        if python3 "$APP_DIR/scripts/getcurrent.py" "$YGG_ADMIN_ENDPOINT" > current.tmp; then
+        case "$COLLECTOR" in
+            lookups) collector="$APP_DIR/scripts/getcurrent.py" ;;
+            *)       collector="$APP_DIR/scripts/crawl-peers.py" ;;
+        esac
+        if python3 "$collector" "$YGG_ADMIN_ENDPOINT" > current.tmp; then
             mv current.tmp current
         else
             rm -f current.tmp

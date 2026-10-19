@@ -1,4 +1,5 @@
 import json
+import os
 import time
 import urllib.request
 
@@ -21,7 +22,12 @@ def position_nodes(nodes, edges):
     for e in edges:
         G.add_edge(e.a.ip, e.b.ip, len=1.0)
 
-    G.layout(prog='neato', args='-Gepsilon=0.0001 -Gmaxiter=100000')
+    # neato gives the nicest result but scales badly; sfdp handles thousands of nodes
+    prog = os.environ.get('LAYOUT_PROG') or ('neato' if len(nodes) <= 500 else 'sfdp')
+    if prog == 'neato':
+        G.layout(prog='neato', args='-Gepsilon=0.0001 -Gmaxiter=100000')
+    else:
+        G.layout(prog=prog, args='-Goverlap=scale')
 
     return G
 
@@ -32,7 +38,9 @@ def compute_betweenness(G):
         for other in G.neighbors(start):
             ng.add_edge(start, other)
 
-    return centrality.betweenness_centrality(ng)
+    # Exact betweenness is O(n*m); sample pivots on large graphs
+    k = None if ng.number_of_nodes() <= 1000 else 500
+    return centrality.betweenness_centrality(ng, k=k, seed=1)
 
 
 def canonalize_ip(ip):
