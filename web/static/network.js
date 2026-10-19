@@ -46,15 +46,30 @@ var RING2_LIMIT = 3000;
 var theme = {};
 var grid = null;            // spatial index for hit testing
 
+// Dot sizes: R0 px at the reference (fitted) zoom, scaled by the peer count,
+// growing with zoom as (zoom / reference)^SIZE_EXP: slower than the map
+// itself, so neighbours separate as you zoom in
+var refScale = 1, R0 = 4, SIZE_EXP = 0.6;
+var R_MIN = 1.5, R_MAX = 48;
+
+// Address height filter: non-matching nodes are dimmed, matching ones listed
+var filter = {min: 0, max: 0, active: false};
+var maxHeight = 0;
+var hasUnknownHeight = false;
+var FILTER_KEY = 'yggmap.heightFilter';
+var FILTER_LIST_LIMIT = 300;
+
 var COLOR_MODE_KEY = 'yggmap.colorMode';
 var DARK_QUERY = '(pointer: coarse), (prefers-color-scheme: dark)';
 var SHEET_QUERY = '(max-width: 700px)';
 
-// Address height classes: 0, 1, 2, 3, 4, 5-7, 8+. Every colour has >= 3:1
-// contrast against its theme background (verified with the WCAG formula).
-var HEIGHT_CLASS_LABELS = ['0', '1', '2', '3', '4', '5–7', '8+'];
-var HEIGHT_COLORS_DARK  = ['#8C8C8C', '#7393D9', '#2EB8AC', '#52C75E', '#B8DE2E', '#F5D21D', '#FF8A2B'];
-var HEIGHT_COLORS_LIGHT = ['#7A7A7A', '#3D5FAD', '#13827A', '#2E8A3B', '#678A00', '#9C7A00', '#C9520A'];
+// Address height classes. Every colour has >= 3.9:1 contrast against its
+// theme background (WCAG) and the closest two colours are >= 18 CIEDE2000
+// apart (23 on black), so neighbouring classes are clearly distinct.
+var HEIGHT_CLASSES = [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 7], [8, 11], [12, 255]];
+var HEIGHT_CLASS_LABELS = ['0', '1', '2', '3', '4', '5–7', '8–11', '12+'];
+var HEIGHT_COLORS_DARK  = ['#8A8A8A', '#4F8CFF', '#16D4E8', '#3DDC6A', '#F0E442', '#FF9922', '#FF4F79', '#C77DFF'];
+var HEIGHT_COLORS_LIGHT = ['#7A7A7A', '#1F5FD6', '#00818F', '#178A3E', '#8C7A00', '#C25E00', '#D11A4A', '#8A3FD1'];
 
 // Hop-distance colours used when a node is selected in peer-count mode
 var DEPTH_COLORS = ['#000000', '#096EE8', '#09E8B8', '#36E809', '#ADE809', '#E8B809', '#E87509', '#E83A09', '#E86946', '#E8AC9B', '#E8C9C1'];
@@ -100,8 +115,9 @@ function ensureContrast(rgb, bg, ratio) {
 
 function heightClass(h) {
     if (h == null) return -1;
-    if (h <= 4) return h;
-    return h <= 7 ? 5 : 6;
+    for (var i = 0; i < HEIGHT_CLASSES.length; ++i)
+        if (h >= HEIGHT_CLASSES[i][0] && h <= HEIGHT_CLASSES[i][1]) return i;
+    return HEIGHT_CLASSES.length - 1;
 }
 
 function heightColor(h) {
@@ -127,14 +143,21 @@ function readTheme() {
     theme.ring = v('--map-ring');
     theme.peerRing = v('--map-peer-ring');
     theme.unknown = v('--map-unknown');
+    theme.label = v('--map-label');
+    theme.labelHalo = v('--map-label-halo');
+    theme.coarse = window.matchMedia('(pointer: coarse)').matches;
     buildLegend();
 }
 
+// Legend chips double as a quick filter: tap a class to show only it
 function buildLegend() {
     var colors = theme.dark ? HEIGHT_COLORS_DARK : HEIGHT_COLORS_LIGHT;
     var html = HEIGHT_CLASS_LABELS.map(function(label, i) {
-        return '<span class="chip"><i style="background:' + colors[i] + '"></i>' + label + '</span>';
-    }).join('') + '<span class="chip"><i class="hollow"></i>unknown</span>';
+        var c = HEIGHT_CLASSES[i];
+        var on = filter.active && filter.min == c[0] && filter.max == Math.min(c[1], maxHeight);
+        return '<button type="button" class="chip' + (on ? ' on' : '') + '" data-class="' + i + '" title="Show only height ' + label + '">' +
+            '<i style="background:' + colors[i] + '"></i>' + label + '</button>';
+    }).join('') + (hasUnknownHeight ? '<span class="chip static"><i class="hollow"></i>unknown</span>' : '');
     $('#height-legend').html(html);
 }
 
@@ -163,20 +186,35 @@ function setCanvasResolution() {
     baseCanvas.height = overlayCanvas.height = h;
 }
 
-// Screen position and radius for the current view
-function nodeRadius(n, z) {
-    // Area follows the peer count at normal zoom; when zoomed far out, keep a
-    // floor that still separates hubs (up to ~4.8 px) from leaves (~1.2 px)
-    return Math.max(n.size * z, 1.2 + (n.size - 2) * 0.3);
+// Radius on screen at view scale s
+function radiusAt(n, s) {
+    var r = R0 * n.sf * Math.pow(s / refScale, SIZE_EXP);
+    return Math.max(R_MIN, Math.min(R_MAX, r));
+}
+
+// Reference sizes, fixed at load: R0 follows the average spacing between
+// nodes at the fitted zoom (2.5..7 px), so dense maps get small dots and
+// sparse ones big dots, and every map starts uncluttered
+function computeSizing() {
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (var i = 0; i < nodes.length; ++i) {
+        minX = Math.min(minX, nodes[i].wx); maxX = Math.max(maxX, nodes[i].wx);
+        minY = Math.min(minY, nodes[i].wy); maxY = Math.max(maxY, nodes[i].wy);
+    }
+    var spacing = Math.sqrt(Math.max(1, (maxX - minX) * (maxY - minY)) / Math.max(1, nodes.length));
+    refScale = view.s;
+    R0 = Math.max(2.5, Math.min(7, 0.35 * spacing * refScale));
+    for (var i = 0; i < nodes.length; ++i)
+        nodes[i].sf = 0.8 + 1.6 * Math.sqrt(nodes[i].degree / maxDegree);   // 0.8 .. 2.4
 }
 
 function project() {
-    var s = view.s, tx = view.tx, ty = view.ty, z = s / BASE_SCALE;
+    var s = view.s, tx = view.tx, ty = view.ty;
     for (var i = 0; i < nodes.length; ++i) {
         var n = nodes[i];
         n.x = n.wx * s + tx;
         n.y = n.wy * s + ty;
-        n.r = nodeRadius(n, z);
+        n.r = radiusAt(n, s);
     }
 }
 
@@ -229,20 +267,36 @@ function countVisibleLinks(pairs) {
     return c;
 }
 
-function drawLabel(ctx, n, color, bold) {
-    var fontPx = Math.max(10, Math.min(18, 8 + n.r * 0.5));
+// Labels in the theme's label colour (white on black) with a dark halo, so
+// they stay readable over dots and links of any colour
+// Labels arrive HTML-escaped (for the panel); the canvas needs plain text
+function decodeEntities(text) {
+    return text.indexOf('&') < 0 ? text : text
+        .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+        .replace(/&#x27;|&#39;/g, "'").replace(/&amp;/g, '&');
+}
+
+function drawLabel(ctx, n, bold) {
+    var fontPx = Math.max(theme.coarse ? 12 : 11, Math.min(18, 9 + n.r * 0.5));
     ctx.font = (bold ? 'bold ' : '') + fontPx + 'px "Ubuntu Mono", monospace';
-    ctx.fillStyle = color;
-    ctx.fillText(n.label, n.x, n.y - n.r - 3);
+    var y = n.y - n.r - 3;
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = theme.labelHalo;
+    ctx.strokeText(n.text, n.x, y);
+    ctx.fillStyle = theme.label;
+    ctx.fillText(n.text, n.x, y);
 }
 
 function drawBase() {
     var ctx = baseCtx;
     prepareCtx(ctx);
 
-    // Backbone tree links; fade them when many overlap on screen
+    // Backbone tree links; fade them when many overlap on screen, and more
+    // while a filter puts the focus on the matching nodes
     var visible = countVisibleLinks(treeEdges);
-    strokeLinks(ctx, treeEdges, theme.edge, Math.max(0.35, Math.min(1, 8000 / Math.max(1, visible))));
+    var linkAlpha = Math.max(0.35, Math.min(1, 8000 / Math.max(1, visible)));
+    strokeLinks(ctx, treeEdges, theme.edge, filter.active ? linkAlpha * 0.4 : linkAlpha);
 
     // Nodes grouped by fill colour: tiny ones as squares (identical at that
     // size, much cheaper than arcs), the rest as circles; hollow = unknown
@@ -253,37 +307,48 @@ function drawBase() {
         if (!inBounds(n))
             continue;
         visibleNodes++;
+        // Group key: colour plus dimmed flag; dimmed groups are drawn faint
+        var key = n.color + (n.dim ? '|d' : '');
         if (n.hollow) {
             hollow.push(n);
         } else if (n.r < 2.5) {
-            (squares[n.color] || (squares[n.color] = [])).push(n);
+            (squares[key] || (squares[key] = [])).push(n);
         } else {
-            (circles[n.color] || (circles[n.color] = [])).push(n);
-            if (drawOutlines && n.r >= 3)
+            (circles[key] || (circles[key] = [])).push(n);
+            if (drawOutlines && n.r >= 4 && !n.dim)
                 outlined.push(n);
         }
     }
-    for (var color in squares) {
-        var list = squares[color];
+    // Dimmed nodes first, so matching nodes are drawn on top of them
+    var keys = function(groups) {
+        return Object.keys(groups).sort(function(a, b) {
+            return (b.indexOf('|d') >= 0) - (a.indexOf('|d') >= 0);
+        });
+    };
+    keys(squares).forEach(function(key) {
+        var list = squares[key];
         ctx.beginPath();
         for (var i = 0; i < list.length; ++i) {
             var n = list[i];
             ctx.rect(n.x - n.r, n.y - n.r, n.r * 2, n.r * 2);
         }
-        ctx.fillStyle = color;
+        ctx.globalAlpha = list[0].dim ? 0.18 : 1;
+        ctx.fillStyle = list[0].color;
         ctx.fill();
-    }
-    for (var color in circles) {
-        var list = circles[color];
+    });
+    keys(circles).forEach(function(key) {
+        var list = circles[key];
         ctx.beginPath();
         for (var i = 0; i < list.length; ++i) {
             var n = list[i];
             ctx.moveTo(n.x + n.r, n.y);
             ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
         }
-        ctx.fillStyle = color;
+        ctx.globalAlpha = list[0].dim ? 0.18 : 1;
+        ctx.fillStyle = list[0].color;
         ctx.fill();
-    }
+    });
+    ctx.globalAlpha = 1;
     if (hollow.length) {
         ctx.beginPath();
         for (var i = 0; i < hollow.length; ++i) {
@@ -293,7 +358,9 @@ function drawBase() {
         }
         ctx.lineWidth = 1.5;
         ctx.strokeStyle = theme.unknown;
+        ctx.globalAlpha = filter.active ? 0.18 : 1;
         ctx.stroke();
+        ctx.globalAlpha = 1;
     }
     if (outlined.length) {
         ctx.beginPath();
@@ -307,15 +374,16 @@ function drawBase() {
         ctx.stroke();
     }
 
-    // Labels: all visible ones when few are on screen, otherwise big nodes only
+    // Labels: all visible ones when few are on screen, otherwise big nodes
+    // only; never for nodes dimmed by the filter
     ctx.textAlign = 'center';
-    var allLabels = visibleNodes <= 400;
+    var allLabels = visibleNodes <= 300;
     for (var i = 0; i < nodes.length; ++i) {
         var n = nodes[i];
-        if (!inBounds(n))
+        if (n.dim || !inBounds(n))
             continue;
-        if (allLabels ? n.r >= 3 : n.r >= 9)
-            drawLabel(ctx, n, n.textColor, false);
+        if (allLabels ? n.r >= 3 : n.r >= 10)
+            drawLabel(ctx, n, false);
     }
 }
 
@@ -347,13 +415,13 @@ function drawOverlay() {
         if (colorMode == 'height')
             drawRings(ctx, peers.filter(inBounds), 1.5, 1.5, theme.peerRing);
         drawRings(ctx, [s], 2.5, 2.5, theme.ring);
-        drawLabel(ctx, s, s.textColor, true);
+        drawLabel(ctx, s, true);
     }
     var h = hoverNode;
     if (h && h !== s) {
         strokeLinks(ctx, peersOf(h).map(function(p) { return [h, p]; }), theme.edgeHighlight, 0.8);
         drawRings(ctx, [h], 1.5, 1, theme.ring);
-        drawLabel(ctx, h, h.textColor, false);
+        drawLabel(ctx, h, false);
     }
 }
 
@@ -508,16 +576,14 @@ function buildGrid() {
         var key = Math.floor((n.wx - minX) / cell) + ',' + Math.floor((n.wy - minY) / cell);
         (cells[key] || (cells[key] = [])).push(n);
     }
-    var maxSize = 0;
-    for (var i = 0; i < nodes.length; ++i) maxSize = Math.max(maxSize, nodes[i].size);
-    grid = {minX: minX, minY: minY, cell: cell, cells: cells, maxSize: maxSize};
+    grid = {minX: minX, minY: minY, cell: cell, cells: cells};
 }
 
 // Nearest node within its radius, or within a minimum hit radius for fingers
 function getNodeAt(px, py, minHit) {
     if (!grid || !nodes.length) return null;
-    var s = view.s, z = s / BASE_SCALE;
-    var maxR = Math.max(minHit || 0, nodeRadius({size: grid.maxSize}, z) + 1);
+    var s = view.s;
+    var maxR = Math.max(minHit || 0, radiusAt({sf: 2.4}, s) + 1);
     var wx = (px - view.tx) / s, wy = (py - view.ty) / s, wr = maxR / s;
     var c0x = Math.floor((wx - wr - grid.minX) / grid.cell), c1x = Math.floor((wx + wr - grid.minX) / grid.cell);
     var c0y = Math.floor((wy - wr - grid.minY) / grid.cell), c1y = Math.floor((wy + wr - grid.minY) / grid.cell);
@@ -535,10 +601,14 @@ function getNodeAt(px, py, minHit) {
     var best = null, bestDist = Infinity;
     for (var i = 0; i < candidates.length; ++i) {
         var n = candidates[i];
-        var r = Math.max(nodeRadius(n, z) + 1, minHit || 0);
+        var r = Math.max(radiusAt(n, s) + 1, minHit || 0);
         var dx = n.wx * s + view.tx - px, dy = n.wy * s + view.ty - py;
         var d = dx * dx + dy * dy;
-        if (d <= r * r && d < bestDist) {
+        if (d > r * r)
+            continue;
+        // Prefer nodes matching the filter over dimmed ones nearby
+        if (n.dim) d = d * 4 + 1;
+        if (d < bestDist) {
             best = n;
             bestDist = d;
         }
@@ -596,6 +666,88 @@ function applyColorMode() {
     $('#height-legend').toggle(colorMode == 'height');
     if (selectedNode && colorMode != 'height')
         markPeers(selectedNode);
+}
+
+// ---------------------------------------------------------------------------
+// Address height filter
+// ---------------------------------------------------------------------------
+
+function matchesFilter(n) {
+    return n.height != null && n.height >= filter.min && n.height <= filter.max;
+}
+
+function applyFilter() {
+    filter.active = filter.min > 0 || filter.max < maxHeight;
+    for (var i = 0; i < nodes.length; ++i)
+        nodes[i].dim = filter.active && !matchesFilter(nodes[i]);
+    $('#hmin').val(filter.min);
+    $('#hmax').val(filter.max);
+    $('#filter-clear').toggle(filter.active);
+    $('#general-info .filter').toggleClass('active', filter.active);
+    buildLegend();
+}
+
+function setFilter(min, max) {
+    min = Math.max(0, Math.min(maxHeight, min));
+    max = Math.max(0, Math.min(maxHeight, max));
+    if (min > max) { var t = min; min = max; max = t; }
+    filter.min = min;
+    filter.max = max;
+    applyFilter();
+    try { window.localStorage.setItem(FILTER_KEY, min + '-' + max); } catch (e) { /* not persisted */ }
+    if (!selectedNode) {
+        if (filter.active) {
+            showFilterList();
+            if (isSheetLayout() && sheetState == 'collapsed') setSheet('half');
+        } else {
+            $('#node-info').html('');
+        }
+    }
+    requestRender();
+}
+
+function initFilter() {
+    var opts = '';
+    for (var h = 0; h <= maxHeight; ++h) opts += '<option value="' + h + '">' + h + '</option>';
+    $('#hmin, #hmax').html(opts);
+    filter.min = 0;
+    filter.max = maxHeight;
+    try {
+        var m = /^(\d+)-(\d+)$/.exec(window.localStorage.getItem(FILTER_KEY) || '');
+        if (m) {
+            filter.min = Math.min(maxHeight, +m[1]);
+            filter.max = Math.min(maxHeight, +m[2]);
+        }
+    } catch (e) { /* storage unavailable */ }
+    applyFilter();
+    $('#hmin').change(function() { setFilter(+this.value, filter.max); });
+    $('#hmax').change(function() { setFilter(filter.min, +this.value); });
+    $('#filter-clear').click(function() { setFilter(0, maxHeight); });
+    $('#height-legend').on('click', 'button.chip', function() {
+        var c = HEIGHT_CLASSES[+this.getAttribute('data-class')];
+        var max = Math.min(c[1], maxHeight);
+        if (filter.active && filter.min == c[0] && filter.max == max) setFilter(0, maxHeight);
+        else setFilter(c[0], max);
+    });
+}
+
+// Panel content while a filter is active and no node is selected
+function showFilterList() {
+    var matching = nodes.filter(matchesFilter);
+    matching.sort(function(a, b) { return (b.height - a.height) || (b.degree - a.degree); });
+    var range = filter.min == filter.max ? String(filter.min) : filter.min + '–' + filter.max;
+    var shown = matching.slice(0, FILTER_LIST_LIMIT);
+    var html =
+        '<h2>Height ' + range + '</h2>' +
+        '<div class="facts"><strong>Matching nodes:</strong> ' + matching.length + '</div>' +
+        (matching.length > shown.length ? '<div class="note">Showing the ' + shown.length + ' highest.</div>' : '') +
+        '<div class="peers">' + shown.map(function(n) {
+            return '<a class="peer" href="#' + n.id + '">' +
+                '<span class="peer-name">' + n.label + '</span>' +
+                '<span class="peer-count">' + n.degree + '</span>' +
+                formatAddress(n.id, n.height) + '</a>';
+        }).join('') + '</div>';
+    $('#node-info').html(html).scrollTop(0);
 }
 
 function setColorMode(mode) {
@@ -664,7 +816,8 @@ function clearSelection() {
     selectedNode = null;
     ring2 = null;
     changeHash('');
-    $('#node-info').html('');
+    if (filter.active) showFilterList();
+    else $('#node-info').html('');
     if (recolor) {
         for (var i = 0; i < nodes.length; ++i) {
             nodes[i].color = nodes[i].baseColor;
@@ -931,8 +1084,9 @@ function initInput() {
             if (node) {
                 selectNode(node, false);
             } else {
+                var hadSelection = !!selectedNode;
                 clearSelection();
-                if (isSheetLayout()) setSheet('collapsed');
+                if (isSheetLayout() && !(filter.active && hadSelection)) setSheet('collapsed');
             }
         }
         if (tap && e.pointerId == tap.id) tap = null;
@@ -980,15 +1134,22 @@ function loadGraph(data) {
             i: i,
             id: r[F.id],
             label: String(r[F.label]),
+            text: decodeEntities(String(r[F.label])),
             wx: r[F.x],
             wy: r[F.y],
             size: r[F.size],
-            height: r[F.height],
+            height: r[F.height] == null ? null : r[F.height],
             degree: r[F.degree],
             centrality: r[F.centrality] || 0,
             coords: r[F.coords] || ''
         };
     });
+    maxHeight = 0;
+    hasUnknownHeight = false;
+    for (var i = 0; i < nodes.length; ++i) {
+        if (nodes[i].height != null) maxHeight = Math.max(maxHeight, nodes[i].height);
+        else hasUnknownHeight = true;
+    }
     treeAdj = nodes.map(function() { return []; });
     treeEdges = [];
     for (var k = 0; k + 1 < data.tree.length; k += 2) {
@@ -1065,6 +1226,8 @@ $(document).ready(function() {
         }
         loadGraph(data);
         fitToView();
+        computeSizing();
+        initFilter();
 
         var delta = Math.round(new Date().getTime() / 1000) - data.created;
         $('#update-time').text(Math.floor(delta / 60) + ' min, ' + (delta % 60) + ' s ago');
@@ -1079,6 +1242,7 @@ $(document).ready(function() {
             var node = searchNode(window.location.hash.substring(1));
             if (node) selectNode(node, true);
         }
+        if (!selectedNode && filter.active) showFilterList();
         requestRender();
         loadLinks(0);
 

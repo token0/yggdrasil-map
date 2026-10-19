@@ -50,13 +50,19 @@ function fitView(st, zoom) {
         minX = Math.min(minX, n[i].wx); maxX = Math.max(maxX, n[i].wx);
         minY = Math.min(minY, n[i].wy); maxY = Math.max(maxY, n[i].wy);
     }
-    var s = Math.min((st.w - 20) / Math.max(1, maxX - minX), (st.h - 20) / Math.max(1, maxY - minY)) * zoom;
+    var fit = Math.min((st.w - 20) / Math.max(1, maxX - minX), (st.h - 20) / Math.max(1, maxY - minY));
+    var s = fit * zoom;
     var cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-    var z = s / 1.2;
+    // Same sizing model as the map (network.js radiusAt)
+    var spacing = Math.sqrt(Math.max(1, (maxX - minX) * (maxY - minY)) / Math.max(1, n.length));
+    var R0 = Math.max(2.5, Math.min(7, 0.35 * spacing * fit));
+    var maxDeg = 1;
+    for (var i = 0; i < n.length; ++i) maxDeg = Math.max(maxDeg, n[i].degree);
     for (var i = 0; i < n.length; ++i) {
         n[i].x = (n[i].wx - cx) * s + st.w / 2;
         n[i].y = (n[i].wy - cy) * s + st.h / 2;
-        n[i].r = Math.max(n[i].size * z, 1.2 + (n[i].size - 2) * 0.3);
+        var sf = 0.8 + 1.6 * Math.sqrt(n[i].degree / maxDeg);
+        n[i].r = Math.max(1.5, Math.min(48, R0 * sf * Math.pow(zoom, 0.6)));
     }
 }
 

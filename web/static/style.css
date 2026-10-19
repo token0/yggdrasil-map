@@ -8,7 +8,7 @@
 	--header-bg: #FFF;
 	--header-hover: #EEE;
 	--header-selected: #DDD;
-	--panel-bg: rgba(220, 220, 220, 0.8);
+	--panel-bg: #E4E4E4;
 	--panel-fg: #333;
 	--panel-border: transparent;
 	--accent: #29BBFF;
@@ -24,6 +24,8 @@
 	--map-peer-ring: #E83A09;
 	--map-unknown: #8F8F8F;
 	--map-ring2: rgba(0, 0, 0, 0.12);
+	--map-label: #111111;
+	--map-label-halo: rgba(255, 255, 255, 0.9);
 	--addr-size: 12px;
 }
 
@@ -36,7 +38,7 @@
 		--header-bg: #0D0D0D;
 		--header-hover: #1F1F1F;
 		--header-selected: #262626;
-		--panel-bg: rgba(16, 16, 16, 0.94);
+		--panel-bg: #101010;
 		--panel-fg: #E6E6E6;
 		--panel-border: #2A2A2A;
 		--input-bg: #1C1C1C;
@@ -46,11 +48,13 @@
 		--suggest-selected: #0B4A66;
 		--map-edge: rgba(255, 255, 255, 0.18);
 		--map-edge-highlight: rgba(255, 255, 255, 0.65);
-		--map-outline: rgba(255, 255, 255, 0.6);
+		--map-outline: rgba(255, 255, 255, 0.35);
 		--map-ring: #FFFFFF;
 		--map-peer-ring: #FF6A3D;
 		--map-unknown: #6B6B6B;
 		--map-ring2: rgba(255, 255, 255, 0.14);
+		--map-label: #FFFFFF;
+		--map-label-halo: rgba(0, 0, 0, 0.85);
 	}
 }
 
@@ -140,11 +144,37 @@ li {
 #general-info .version {
 	color: var(--muted);
 }
-#color-mode {
-	font-size: 10px;
+#general-info .controls {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 6px;
 	margin-top: 4px;
+}
+#color-mode, .filter select {
+	font-size: 10px;
 	background: var(--input-bg);
 	color: var(--input-fg);
+}
+.filter {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	white-space: nowrap;
+	border-radius: 4px;
+	padding: 1px 3px;
+}
+.filter.active {
+	outline: 1px solid var(--accent);
+}
+#filter-clear {
+	display: none;
+	border: none;
+	background: transparent;
+	color: var(--accent);
+	font-size: 1.1em;
+	cursor: pointer;
+	padding: 0 4px;
 }
 #height-legend {
 	display: none;
@@ -153,8 +183,21 @@ li {
 }
 #height-legend .chip {
 	display: inline-block;
-	margin-right: 6px;
+	margin: 2px 4px 0 0;
+	padding: 1px 4px;
 	white-space: nowrap;
+	font: inherit;
+	color: inherit;
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: 4px;
+	cursor: pointer;
+}
+#height-legend .chip.static {
+	cursor: default;
+}
+#height-legend .chip.on {
+	border-color: var(--accent);
 }
 #height-legend .chip i {
 	display: inline-block;
@@ -372,10 +415,21 @@ body.page-about #content-wrapper {
 	#general-info {
 		font-size: 0.875rem;
 	}
-	#color-mode {
+	#color-mode, .filter select {
 		font-size: 1rem;
 		min-height: 2.75rem;
 		padding: 0 0.5rem;
+	}
+	.filter label {
+		font-size: 0.875rem;
+	}
+	#filter-clear {
+		min-width: 2.75rem;
+		min-height: 2.75rem;
+		font-size: 1.25rem;
+	}
+	#height-legend .chip {
+		padding: 0.3rem 0.4rem;
 	}
 	#sidebar, #search-box, .autocomplete-suggestions {
 		font-size: 1rem;

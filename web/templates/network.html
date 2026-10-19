@@ -13,6 +13,11 @@
 				<option value="peers">Peer count</option>
 				<option value="height">Address height</option>
 			</select>
+			<span class="filter">
+				<label for="hmin">Height</label>
+				<select id="hmin" aria-label="Minimum address height"></select>–<select id="hmax" aria-label="Maximum address height"></select>
+				<button id="filter-clear" type="button" aria-label="Clear the height filter" title="Clear the height filter">✕</button>
+			</span>
 		</div>
 		<div id="height-legend" aria-label="Address height classes"></div>
 		<div class="version">v{{ version }}</div>

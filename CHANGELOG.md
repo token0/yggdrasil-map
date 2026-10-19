@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.2.0
+
+### Added
+- Address height filter next to "Color by" (Height min–max, ✕ to clear):
+  non-matching nodes are dimmed, matching ones keep their colours and labels,
+  and with no node selected the panel lists the matching nodes, highest
+  first (up to 300). Legend chips are quick filters: tap a class to show only
+  it, tap again to clear. The filter is remembered per browser.
+
+### Changed
+- Dots grow when zooming in (radius ~ zoom^0.6, so neighbours separate) and
+  start from a size derived from the map's density; bigger at every zoom
+  level (2.5–7 px base, up to 48 px).
+- Node labels on the map are white on the dark theme (near-black on light)
+  with a halo, readable over any dot or link colour.
+- Height classes: 0, 1, 2, 3, 4, 5–7, 8–11, 12+ with a new palette: the two
+  closest colours are 23 CIEDE2000 apart on black (was 16), neighbouring
+  classes 27–39 apart; all >= 3.9:1 contrast on their background.
+- Panels are opaque; node outlines on the dark theme are subtler and only on
+  dots >= 4 px; the legend hides "unknown" when no node has unknown height.
+
+### Fixed
+- Names containing &, <, >, quotes showed as HTML entities on the map.
+- Taps prefer nodes matching the filter over dimmed ones nearby.
+
+
 ## 2.1.0
 
 ### Fixed

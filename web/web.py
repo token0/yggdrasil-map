@@ -9,7 +9,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--host", type=str, help="host to listen on (default 'localhost')", default="localhost")
 parser.add_argument("--port", type=int, help="port to listen on (default '3000')", default=3000)
 
-APP_VERSION = '2.1'
+APP_VERSION = '2.2'
 
 app = Flask(__name__)
 app.config.from_pyfile('web_config.cfg')
