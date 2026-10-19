@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block content %}
+	<div id="content-wrapper" class="bench-page">
+		<div id="content" class="bench">
+			<h2>Renderer benchmark</h2>
+			<p>Draws the current map in several ways and measures each on this device. Keep the page in the foreground while it runs; it takes about a minute.</p>
+			<p><button id="bench-run" type="button">Run benchmark</button> <span id="bench-status"></span></p>
+			<div id="bench-stage"><div id="bench-layer"><canvas id="bench-canvas"></canvas></div></div>
+			<table id="bench-results"></table>
+			<textarea id="bench-text" readonly rows="8" placeholder="Results appear here, ready to copy."></textarea>
+			<p><button id="bench-copy" type="button">Select results for copying</button></p>
+		</div>
+	</div>
+	<script type="text/javascript" src="static/bench.js?v={{ version }}"></script>
+{% endblock %}

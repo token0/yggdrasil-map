@@ -22,7 +22,8 @@
 	--map-outline: transparent;
 	--map-ring: #000000;
 	--map-peer-ring: #E83A09;
-	--map-unknown: #BBBBBB;
+	--map-unknown: #8F8F8F;
+	--map-ring2: rgba(0, 0, 0, 0.12);
 	--addr-size: 12px;
 }
 
@@ -48,7 +49,8 @@
 		--map-outline: rgba(255, 255, 255, 0.6);
 		--map-ring: #FFFFFF;
 		--map-peer-ring: #FF6A3D;
-		--map-unknown: #BBBBBB;
+		--map-unknown: #6B6B6B;
+		--map-ring2: rgba(255, 255, 255, 0.14);
 	}
 }
 
@@ -149,21 +151,23 @@ li {
 	margin-top: 4px;
 	white-space: nowrap;
 }
-#height-bar {
+#height-legend .chip {
 	display: inline-block;
-	width: 120px;
-	height: 8px;
-	vertical-align: middle;
-	background: linear-gradient(to right, #440154, #3b528b, #21918c, #5ec962, #fde725);
+	margin-right: 6px;
+	white-space: nowrap;
 }
-.height-unknown {
+#height-legend .chip i {
 	display: inline-block;
 	width: 8px;
 	height: 8px;
-	margin-left: 8px;
-	vertical-align: middle;
+	margin-right: 2px;
 	border-radius: 50%;
-	background: var(--map-unknown);
+	vertical-align: middle;
+}
+#height-legend .chip i.hollow {
+	background: transparent !important;
+	border: 1.5px solid var(--map-unknown);
+	box-sizing: border-box;
 }
 
 /* Node panel: right-hand sidebar on wide screens, bottom sheet on narrow ones */
@@ -230,6 +234,11 @@ li {
 #node-info .facts {
 	line-height: 1.6;
 	margin-bottom: 10px;
+}
+#node-info .note {
+	color: var(--muted);
+	font-style: italic;
+	margin-bottom: 8px;
 }
 #node-info .peers {
 	border-top: 1px solid var(--panel-border);
@@ -302,13 +311,28 @@ li {
 	bottom: 0;
 }
 
-#map {
-	position: absolute;
-	width: 100%;
-	height: 100%;
+/* The map layer is larger than the viewport (a margin on every side) and is
+   moved with a CSS transform during pan/zoom gestures; it is redrawn sharp
+   once the gesture ends. */
+body.page-network #content-wrapper {
+	overflow: hidden;
 	/* Gestures on the map drive the map, never page zoom or scroll */
 	touch-action: none;
+}
+#map-layer {
+	position: absolute;
+	will-change: transform;
+}
+#map, #overlay {
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 100%;
 	display: block;
+}
+#overlay {
+	pointer-events: none;
 }
 
 /* About page */
@@ -366,12 +390,9 @@ body.page-about #content-wrapper {
 		min-height: 2.75rem;
 		padding: 0.4rem 0;
 	}
-	#height-bar {
-		height: 0.6rem;
-	}
-	.height-unknown {
-		width: 0.6rem;
-		height: 0.6rem;
+	#height-legend .chip i {
+		width: 0.7rem;
+		height: 0.7rem;
 	}
 }
 
@@ -406,6 +427,9 @@ body.page-about #content-wrapper {
 	}
 	#general-info .controls, #height-legend {
 		pointer-events: auto;
+	}
+	#height-legend {
+		white-space: normal;
 	}
 	#general-info .controls {
 		margin-top: 0.25rem;
@@ -462,4 +486,60 @@ body.page-about #content-wrapper {
 	#node-info h2 {
 		font-size: 1.25rem;
 	}
+}
+
+/* Benchmark page */
+body.page-bench #content-wrapper {
+	overflow-y: auto;
+}
+#content.bench {
+	max-width: 760px;
+}
+#bench-stage {
+	position: relative;
+	width: 100%;
+	height: 50vh;
+	overflow: hidden;
+	border: 1px solid var(--muted);
+	margin: 12px 0;
+	background: var(--bg);
+}
+#bench-layer {
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 100%;
+	transform-origin: 50% 50%;
+}
+#bench-canvas {
+	display: block;
+}
+#bench-results {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 14px;
+	line-height: 1.4;
+}
+#bench-results td, #bench-results th {
+	border-bottom: 1px solid var(--panel-border, #ccc);
+	padding: 4px 6px;
+	text-align: left;
+}
+#bench-results td + td, #bench-results th + th {
+	text-align: right;
+	white-space: nowrap;
+}
+#bench-text {
+	width: 100%;
+	margin-top: 12px;
+	font-family: monospace;
+	font-size: 12px;
+	background: var(--input-bg);
+	color: var(--input-fg);
+}
+#content.bench button {
+	font-size: 16px;
+	padding: 6px 14px;
+	min-height: 2.75rem;
 }

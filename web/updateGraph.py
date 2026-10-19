@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
+import gzip
 import html
 import ipaddress
 import json
 import os
 import urllib.parse
 import urllib.request
+from collections import deque
 
 import graphPlotter
 
@@ -125,9 +127,10 @@ def generate_graph(time_limit=60*60*3):
     data = json.loads(read_source(url))["yggnodes"]
 
     if any('peers' in entry for entry in data.values()):
-        # Crawler output (scripts/crawl-peers.py): draw the real peering graph
+        # Crawler output (scripts/crawl-peers.py): all peer links, drawn as a
+        # backbone tree with the full link set available on selection
         nodes, edges = build_peer_graph(data)
-        write_graph(nodes, edges)
+        write_graph(nodes, edges, backbone_tree(nodes, edges), 'peers')
         return
 
     toAdd = []
@@ -164,19 +167,69 @@ def generate_graph(time_limit=60*60*3):
             continue  # root has no parent
         edges.append(LinkInfo(node, nodes[node.getParent()]))
 
-    write_graph(nodes, edges)
+    # lookups data is already a tree: the tree and the full link set coincide
+    write_graph(nodes, edges, edges, 'tree')
 
 
-def write_graph(nodes, edges):
-    print('%d nodes, %d edges' % (len(nodes), len(edges)))
+def backbone_tree(nodes, edges):
+    """Breadth-first spanning tree of the peer graph, one per component.
 
-    graph = graphPlotter.position_nodes(nodes, edges)
-    js = graphPlotter.get_graph_json(graph)
+    Each component is rooted at its best-connected node, and neighbours are
+    visited best-connected first, so the tree follows the shortest hop paths
+    from the hubs. Every tree link is a real peering. This approximates, but
+    is not, yggdrasil's own spanning tree, whose parent links are not exposed
+    by the remote debug API.
+    """
+    adjacency = {ip: [] for ip in nodes}
+    for e in edges:
+        adjacency[e.a.ip].append(e.b.ip)
+        adjacency[e.b.ip].append(e.a.ip)
+    degree = {ip: len(peers) for ip, peers in adjacency.items()}
+    order = lambda ip: (-degree[ip], ip)
+    for ip in adjacency:
+        adjacency[ip].sort(key=order)
 
-    # Write atomically so the web server never serves a half-written file
-    with open('static/graph.json.tmp', 'w', encoding='utf-8') as f:
-        f.write(js)
-    os.replace('static/graph.json.tmp', 'static/graph.json')
+    visited = set()
+    tree = []
+    for root in sorted(nodes, key=order):
+        if root in visited:
+            continue
+        visited.add(root)
+        queue = deque([root])
+        while queue:
+            u = queue.popleft()
+            for v in adjacency[u]:
+                if v not in visited:
+                    visited.add(v)
+                    tree.append(LinkInfo(nodes[u], nodes[v]))
+                    queue.append(v)
+    return tree
+
+
+def write_atomic(path, text):
+    """Write text and a gzip copy atomically, so a half-written file is never served."""
+    data = text.encode('utf-8')
+    with open(path + '.tmp', 'wb') as f:
+        f.write(data)
+    with open(path + '.gz.tmp', 'wb') as f:
+        f.write(gzip.compress(data, compresslevel=6, mtime=0))
+    os.replace(path + '.gz.tmp', path + '.gz')
+    os.replace(path + '.tmp', path)
+
+
+def write_graph(nodes, full_edges, tree_edges, mode):
+    print('%d nodes, %d edges' % (len(nodes), len(full_edges)))
+
+    # Lay out on the tree only: a readable tree shape, as in upstream
+    graph = graphPlotter.position_nodes(nodes, tree_edges)
+    graph_json, links_json = graphPlotter.export_graph(graph, nodes, full_edges, tree_edges, mode)
+
+    # links.json first: the page loads graph.json first and links.json after,
+    # and checks that both carry the same 'created' stamp
+    write_atomic('static/links.json', links_json)
+    write_atomic('static/graph.json', graph_json)
+    print('wrote graph.json (%d KB) and links.json (%d KB)'
+          % (len(graph_json) // 1024, len(links_json) // 1024))
 
 
 if __name__ == '__main__':

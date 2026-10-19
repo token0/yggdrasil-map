@@ -63,54 +63,76 @@ def load_db():
                 for v in (l.split(None)[:2] for l in lines) if len(v) > 1)
 
 
-def get_graph_json(G):
-    ng = to_networkx(G)
-    degree = dict(ng.degree())
-    max_neighbors = max([1] + list(degree.values()))
-    print('Max neighbors: %d' % max_neighbors)
+FIELDS = ['id', 'label', 'x', 'y', 'size', 'height', 'degree', 'centrality', 'coords']
 
-    out_data = {
-        'created': int(time.time()),
-        'nodes': [],
-        'edges': []
-    }
 
-    centralities = compute_betweenness(ng)
+def export_graph(G, nodes, full_edges, tree_edges, mode):
+    """Build the compact map data.
+
+    Returns (graph_json, links_json):
+      graph.json: {"version": 2, "created", "mode", "fields", "nodes": [[...], ...],
+                   "maxDegree", "tree": [i0, j0, i1, j1, ...]}
+      links.json: {"created", "links": [i0, j0, ...]}   (all peer links)
+    Nodes are referenced by their index in "nodes". Circle size follows the
+    peer count (area proportional to degree); centrality is informational.
+    """
+    created = int(time.time())
+    ids = [n.name for n in G.iternodes()]
+    index = {ip: i for i, ip in enumerate(ids)}
+
+    full = nx.Graph()
+    full.add_nodes_from(ids)
+    full.add_edges_from((e.a.ip, e.b.ip) for e in full_edges)
+    degree = dict(full.degree())
+    max_degree = max([1] + list(degree.values()))
+    print('Max neighbors: %d' % max_degree)
+    centralities = compute_betweenness(full)
     db = load_db()
 
+    out_nodes = []
     for n in G.iternodes():
         attr = n.attr
-        neighbor_ratio = degree.get(n.name, 0) / float(max_neighbors)
         pos = attr['pos'].split(',', 1)
-        centrality = centralities.get(n.name, 0)
-        size = 5*(1 + 1*centrality)
         name = db.get(canonalize_ip(n.name))
-        # If label isn't the default value, set name to that instead
         label = attr['label']
+        # If label isn't the default value, use it as the name
         if label != n.name.split(':')[-1]:
             name = label
         height = attr.get('height_addr')
+        deg = degree.get(n.name, 0)
+        size = 2 + 12 * (deg / float(max_degree)) ** 0.5
+        out_nodes.append([
+            n.name,
+            name if name else label,
+            round(float(pos[0]), 1),
+            round(float(pos[1]), 1),
+            round(size, 2),
+            int(height) if height else None,
+            deg,
+            round(centralities.get(n.name, 0), 4),
+            attr['coords'] or '',
+        ])
 
-        out_data['nodes'].append({
-            'id': n.name,
-            'label': name if name else label,
-            'name': name,
-            'coords': attr['coords'],
-            'x': float(pos[0]),
-            'y': float(pos[1]),
-            'color': _gradient_color(neighbor_ratio, [(100, 100, 100), (0, 0, 0)]),
-            'size': size,
-            'centrality': '%.4f' % centrality,
-            'height': int(height) if height else None
-        })
+    def pairs(edges):
+        flat = []
+        for e in edges:
+            a, b = index.get(e.a.ip), index.get(e.b.ip)
+            if a is not None and b is not None and a != b:
+                flat += (a, b)
+        return flat
 
-    for e in G.iteredges():
-        out_data['edges'].append({
-            'sourceID': e[0],
-            'targetID': e[1]
-        })
-
-    return json.dumps(out_data)
+    graph = {
+        'version': 2,
+        'created': created,
+        'mode': mode,
+        'fields': FIELDS,
+        'maxDegree': max_degree,
+        'nodes': out_nodes,
+        'tree': pairs(tree_edges),
+    }
+    links = {'created': created, 'links': pairs(full_edges)}
+    return (json.dumps(graph, separators=(',', ':')),
+            json.dumps(links, separators=(',', ':')))
 
 
 def _gradient_color(ratio, colors):

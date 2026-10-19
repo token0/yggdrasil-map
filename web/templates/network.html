@@ -14,12 +14,7 @@
 				<option value="height">Address height</option>
 			</select>
 		</div>
-		<div id="height-legend">
-			<span id="height-min">-</span>
-			<span id="height-bar"></span>
-			<span id="height-max">-</span>
-			<span class="height-unknown"></span> unknown
-		</div>
+		<div id="height-legend" aria-label="Address height classes"></div>
 		<div class="version">v{{ version }}</div>
 	</div>
 
@@ -32,7 +27,10 @@
 	</div>
 
 	<div id="content-wrapper">
-		<canvas id="map"></canvas>
+		<div id="map-layer">
+			<canvas id="map"></canvas>
+			<canvas id="overlay"></canvas>
+		</div>
 	</div>
 
 	<script type="text/javascript" src="static/network.js?v={{ version }}"></script>

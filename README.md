@@ -26,16 +26,26 @@ Use `--host`/`--port` to adjust the address/port the server listens on (default 
 
 Run `web/updateGraph.py` periodically to rerender nodes graph. It reads crawler output from `web/current` (a local path or URL, see `url` in `updateGraph.py`). You may want to customize reverse-proxy IP retrieval logic in web.py.
 
-### Mobile and touch (v2.0)
+### Map view (v2.1)
 
-  * Pinch and drag move and zoom the map itself, never the page; mouse wheel
-    and trackpad pinch zoom around the cursor.
-  * On narrow screens node details live in a bottom sheet: drag or tap its
-    handle to switch between collapsed, half and full height.
+  * Initial view: a backbone tree computed from the peer graph (one link per
+    node, breadth-first from the best-connected node). Selecting a node shows
+    all its peer links, and its peers' links faintly (capped at 3000).
+  * Dot size follows the peer count; colour follows peer count or address
+    height (discrete classes 0, 1, 2, 3, 4, 5–7, 8+).
+  * Pan and zoom move the already drawn map with a CSS transform and redraw it
+    once when the gesture ends, so weak devices stay smooth.
+  * Pinch and drag move and zoom the map itself, never the page. On narrow
+    screens node details live in a bottom sheet with a drag handle.
   * Touch devices, and desktops whose OS prefers dark mode, get a pitch-black
-    theme with light edges, outlined nodes and a contrast-adjusted palette.
-  * Addresses show their height byte (last two hex digits of the first group)
-    in the node's height colour.
+    theme.
+  * `/bench` times the renderer variants on the current device.
+
+### Data files
+
+`updateGraph.py` writes `web/static/graph.json` (nodes and backbone tree, nodes
+referenced by index) and `web/static/links.json` (all peer links), each with a
+gzip copy; `/data/<file>` serves them compressed with ETag revalidation.
 
 ### Colouring
 
