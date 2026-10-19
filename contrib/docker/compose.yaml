@@ -1,0 +1,22 @@
+services:
+  yggdrasil-map:
+    build:
+      # Git build context: the repository itself provides the Dockerfile
+      context: ${MAP_GIT_CONTEXT}
+      dockerfile: contrib/docker/Dockerfile
+    image: yggdrasil-map:local
+    # Rebuild (cached) on every `up`, so redeploying picks up new commits
+    pull_policy: build
+    container_name: yggdrasil-map
+    restart: unless-stopped
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      YGG_ADMIN_ENDPOINT: unix:///run/yggdrasil/${YGG_SOCKET_NAME}
+      UPDATE_INTERVAL: ${UPDATE_INTERVAL}
+    volumes:
+      # Mount the directory, not the socket file: the socket is recreated
+      # (new inode) whenever yggdrasil restarts
+      - ${YGG_SOCKET_DIR}:/run/yggdrasil:ro
+    ports:
+      - ${MAP_BIND}:${MAP_PORT}:3000

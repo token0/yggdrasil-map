@@ -36,19 +36,25 @@ The map has a "Color by" switch in the bottom-left corner:
 The choice is remembered in the browser.
 
 ## Web server with Docker
-### 1. Build image
+
+The image collects data itself from the local node's admin socket using the
+`lookups` request, which requires `LogLookups: true` in the yggdrasil config.
+It then re-renders every `UPDATE_INTERVAL` seconds.
+
+### Compose (e.g. Dockge)
+Use [`contrib/docker/compose.yaml`](contrib/docker/compose.yaml) together with
+[`contrib/docker/.env.example`](contrib/docker/.env.example) saved as `.env`.
+Compose builds the image directly from the git URL in `MAP_GIT_CONTEXT`, so no
+local checkout is needed.
+
+### Plain docker
 From the repository root:
 ```bash
 sudo docker build -f contrib/docker/Dockerfile -t yggdrasil-map .
+sudo docker run --name yggdrasil-map -d --restart always \
+  -v /var/run/yggdrasil:/run/yggdrasil:ro -p 127.0.0.1:3000:3000 yggdrasil-map
 ```
 
-### 2. Create container
-Run with using Docker host network
-```bash
-sudo docker run --name yggdrasil-map -d --net host --restart always yggdrasil-map
-```
-
-You can also use other Docker networks
-```bash
-sudo docker run --name yggdrasil-map -d --net local --ip 10.254.1.3 --ip6 fd80:deaf:1::3 --mac-address 02:42:01:00:00:03 -e HOST=fd80:deaf:1::3 -e PORT=80 --restart always yggdrasil-map
-```
+Environment: `HOST`, `PORT`, `UPDATE_INTERVAL` (default 600),
+`YGG_ADMIN_ENDPOINT` (`unix:///path` or `tcp://host:port`, empty to skip
+collection), `CURRENT_SOURCE` (file or URL to render, default `current`).

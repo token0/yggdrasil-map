@@ -2,13 +2,14 @@
 import html
 import ipaddress
 import json
+import os
 import urllib.parse
 import urllib.request
 
 import graphPlotter
 
-#url = "http://y.yakamo.org:3000/current"
-url = "current"
+# Crawler output: local file path or URL (e.g. "http://y.yakamo.org:3000/current")
+url = os.environ.get("CURRENT_SOURCE", "current")
 
 
 def read_source(src):
@@ -114,8 +115,10 @@ def generate_graph(time_limit=60*60*3):
     graph = graphPlotter.position_nodes(nodes, edges)
     js = graphPlotter.get_graph_json(graph)
 
-    with open('static/graph.json', 'w', encoding='utf-8') as f:
+    # Write atomically so the web server never serves a half-written file
+    with open('static/graph.json.tmp', 'w', encoding='utf-8') as f:
         f.write(js)
+    os.replace('static/graph.json.tmp', 'static/graph.json')
 
 
 if __name__ == '__main__':
