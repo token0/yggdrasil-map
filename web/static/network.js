@@ -186,10 +186,18 @@ function setCanvasResolution() {
     baseCanvas.height = overlayCanvas.height = h;
 }
 
-// Radius on screen at view scale s
+// Radius on screen at view scale s.
+// Zoomed out (up to the fitted zoom): the small v2.1 dots, so the overview
+// stays uncluttered. Zooming in: blend towards the larger, zoom-growing size,
+// fully reached at 4x the fitted zoom.
 function radiusAt(n, s) {
-    var r = R0 * n.sf * Math.pow(s / refScale, SIZE_EXP);
-    return Math.max(R_MIN, Math.min(R_MAX, r));
+    var rSmall = Math.max(n.size * s / BASE_SCALE, 1.2 + (n.size - 2) * 0.3);
+    var k = s / refScale;
+    if (k <= 1)
+        return Math.min(R_MAX, rSmall);
+    var rLarge = R0 * n.sf * Math.pow(k, SIZE_EXP);
+    var t = Math.min(1, Math.log(k) / Math.log(4));
+    return Math.max(R_MIN * 0.8, Math.min(R_MAX, rSmall + (rLarge - rSmall) * t));
 }
 
 // Reference sizes, fixed at load: R0 follows the average spacing between
@@ -583,7 +591,7 @@ function buildGrid() {
 function getNodeAt(px, py, minHit) {
     if (!grid || !nodes.length) return null;
     var s = view.s;
-    var maxR = Math.max(minHit || 0, radiusAt({sf: 2.4}, s) + 1);
+    var maxR = Math.max(minHit || 0, radiusAt({sf: 2.4, size: 14}, s) + 1);
     var wx = (px - view.tx) / s, wy = (py - view.ty) / s, wr = maxR / s;
     var c0x = Math.floor((wx - wr - grid.minX) / grid.cell), c1x = Math.floor((wx + wr - grid.minX) / grid.cell);
     var c0y = Math.floor((wy - wr - grid.minY) / grid.cell), c1y = Math.floor((wy + wr - grid.minY) / grid.cell);

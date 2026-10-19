@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.2.1
+
+### Changed
+- Zoomed out (up to the fitted zoom) dots are the small v2.1 sizes again;
+  zooming in blends smoothly to the larger v2.2 sizes, reached at 4x.
+
+
 ## 2.2.0
 
 ### Added

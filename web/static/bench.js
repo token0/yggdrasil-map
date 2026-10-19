@@ -62,7 +62,9 @@ function fitView(st, zoom) {
         n[i].x = (n[i].wx - cx) * s + st.w / 2;
         n[i].y = (n[i].wy - cy) * s + st.h / 2;
         var sf = 0.8 + 1.6 * Math.sqrt(n[i].degree / maxDeg);
-        n[i].r = Math.max(1.5, Math.min(48, R0 * sf * Math.pow(zoom, 0.6)));
+        var rSmall = Math.max(n[i].size * s / 1.2, 1.2 + (n[i].size - 2) * 0.3);
+        var t = zoom <= 1 ? 0 : Math.min(1, Math.log(zoom) / Math.log(4));
+        n[i].r = Math.min(48, rSmall + (R0 * sf * Math.pow(zoom, 0.6) - rSmall) * t);
     }
 }
 
