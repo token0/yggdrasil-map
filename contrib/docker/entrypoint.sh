@@ -85,7 +85,12 @@ fi
         fi
         # dash's -nt is false when the second file is missing, so test that separately
         if [ -f current ] && { [ ! -f static/graph.json ] || [ current -nt static/graph.json ]; }; then
-            python3 updateGraph.py || echo "render: failed" >&2
+            started=$(date +%s)
+            if python3 updateGraph.py; then
+                echo "render: done in $(( $(date +%s) - started )) s"
+            else
+                echo "render: failed" >&2
+            fi
         fi
         sleep "${RENDER_CHECK_INTERVAL:-30}"
     done

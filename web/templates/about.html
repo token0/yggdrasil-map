@@ -4,18 +4,15 @@
 	<div id="content-wrapper">
 		<div id="content">
 			<h2>About</h2>
-            <p>This is a project that aims to demystify what the <a href="https://yggdrasil-network.github.io/">Yggdrasil</a> network is like. Currently the only thing we have here is a map of the spanning tree subset of the network. The full source code is at <a href="https://github.com/Arceliar/yggdrasil-map">GitHub</a>.</p>
-			<br>
+			<p class="version">yggdrasil-map v{{ version }}</p>
+			<p>This is a project that aims to demystify what the <a href="https://yggdrasil-network.github.io/">Yggdrasil</a> network is like. The full source code of this version is at <a href="https://github.com/token0/yggdrasil-map">github.com/token0/yggdrasil-map</a>, a fork of <a href="https://github.com/Arceliar/yggdrasil-map">Arceliar/yggdrasil-map</a>.</p>
 
 			<h3>Network map</h3>
-			<p>The network page has a map of Yggdrasil's spanning tree as it is now. The map is not complete since it is hard/impossible to get a full picture of the network, and it only includes the minimum subset of links needed to construct the spanning tree. The known nodes and tree coordinates are taken from <a href="http://y.yakamo.org:3000/">Yakamo's API</a>. Node names can be configured by setting a "name" field in <a href="https://yggdrasil-network.github.io/configuration.html">NodeInfo</a>, or from <a href="https://github.com/yakamok/yggdrasil-nodelist">Yakamo's node list</a> as a fallback.</p>
-			<!--
-			<h3>Node names</h3>
-			<p>For now, node names are assigned manually. You can submit Pull Request to <a href="https://github.com/zielmicha/nodedb">nodedb</a> if you want to have your node named. 
-			In future this will be replaced by some reverse DNS system.
-      -->
-			<h3>Contact</h3>
-			<p>This project was forked from <em>zielmicha</em>'s fork of <em>Randati</em>'s fc00. 
+			<p>The map shows the peering graph of the network as seen from this site's own Yggdrasil node: starting from that node, every reachable node is asked for its peers. Nodes that do not answer such requests, and nodes reachable only through them, are missing, so the map is never complete. With the <em>lookups</em> collector it instead shows the spanning tree as seen by the node.</p>
+			<p>Node names come from the "name" field in <a href="https://yggdrasil-network.github.io/configuration.html">NodeInfo</a>. Dot size follows betweenness centrality; colour follows either the peer count or the address height, the number of leading zero bits of the node's public key, which is encoded in the last two hex digits of the address's first group (e.g. <span class="addr">21e:</span> is height 30).</p>
+
+			<h3>Credits</h3>
+			<p>This project was forked from <em>Arceliar</em>'s yggdrasil-map, itself forked from <em>zielmicha</em>'s fork of <em>Randati</em>'s fc00.
 	The yggdrasil developers can be contacted over matrix or IRC, for more info see: <a href="https://yggdrasil-network.github.io/">yggdrasil-network.github.io</a>.</p>
 		</div>
 	</div>

@@ -2,20 +2,22 @@
 <html>
 	<head>
 		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<meta name="version" content="{{ version }}">
 		<title>0200::/7 – Mapping The Yggdrasil Network</title>
 		<script src="static/jquery-2.0.3.min.js"></script>
 		<script src="static/jquery.autocomplete.min.js"></script>
-		<link href='static/style.css' rel='stylesheet' type='text/css'>
+		<link href='static/style.css?v={{ version }}' rel='stylesheet' type='text/css'>
 	</head>
-	<body>
+	<body class="page-{{ page }}">
 		<div id="header">
 			<h1>0200<span class="grey">::/7</span></h1>
 
 			<ul>
 				<li><a href="/" {% if page == 'network' %} class="selected" {% endif %}>Network</a></li>
 				<li><a href="/about"{% if page == 'about' %} class="selected" {% endif %}>About</a></li>
-				<li><a href="https://github.com/Arceliar/yggdrasil-map">Source</a></li>
-				<li><tt>{% if ip is not none %}{{ ip }}{% endif %}</tt></li>
+				<li><a href="https://github.com/token0/yggdrasil-map">Source</a></li>
+				<li class="client-ip"><tt>{% if ip is not none %}{{ ip }}{% endif %}</tt></li>
 			</ul>
 		</div>
 

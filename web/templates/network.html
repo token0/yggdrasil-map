@@ -2,25 +2,31 @@
 
 {% block content %}
 	<div id="general-info">
-		Nodes: <span id="number-of-nodes">-</span><br>
-		Links: <span id="number-of-connections">-</span><br>
-		Updated <span id="update-time">-</span><br>
-		<label for="color-mode">Color by</label>
-		<select id="color-mode">
-			<option value="peers">Peer count</option>
-			<option value="height">Address height</option>
-		</select>
+		<div class="stats">
+			<span class="stat">Nodes: <span id="number-of-nodes">-</span></span>
+			<span class="stat">Links: <span id="number-of-connections">-</span></span>
+			<span class="stat">Updated <span id="update-time">-</span></span>
+		</div>
+		<div class="controls">
+			<label for="color-mode">Color by</label>
+			<select id="color-mode">
+				<option value="peers">Peer count</option>
+				<option value="height">Address height</option>
+			</select>
+		</div>
 		<div id="height-legend">
 			<span id="height-min">-</span>
 			<span id="height-bar"></span>
 			<span id="height-max">-</span>
 			<span class="height-unknown"></span> unknown
 		</div>
+		<div class="version">v{{ version }}</div>
 	</div>
-	
+
 	<div id="sidebar">
+		<div id="sheet-handle" role="button" tabindex="0" aria-label="Expand or collapse the panel"><span></span></div>
 		<div id="search-wrapper">
-			<input id="search-box" class="tt" type="text" placeholder="Search nodes...">
+			<input id="search-box" class="tt" type="search" placeholder="Search nodes..." autocomplete="off" spellcheck="false">
 		</div>
 		<div id="node-info"></div>
 	</div>
@@ -29,5 +35,5 @@
 		<canvas id="map"></canvas>
 	</div>
 
-	<script type="text/javascript" src="static/network.js"></script>
+	<script type="text/javascript" src="static/network.js?v={{ version }}"></script>
 {% endblock %}

@@ -26,6 +26,17 @@ Use `--host`/`--port` to adjust the address/port the server listens on (default 
 
 Run `web/updateGraph.py` periodically to rerender nodes graph. It reads crawler output from `web/current` (a local path or URL, see `url` in `updateGraph.py`). You may want to customize reverse-proxy IP retrieval logic in web.py.
 
+### Mobile and touch (v2.0)
+
+  * Pinch and drag move and zoom the map itself, never the page; mouse wheel
+    and trackpad pinch zoom around the cursor.
+  * On narrow screens node details live in a bottom sheet: drag or tap its
+    handle to switch between collapsed, half and full height.
+  * Touch devices, and desktops whose OS prefers dark mode, get a pitch-black
+    theme with light edges, outlined nodes and a contrast-adjusted palette.
+  * Addresses show their height byte (last two hex digits of the first group)
+    in the node's height colour.
+
 ### Colouring
 
 The map has a "Color by" switch in the bottom-left corner:

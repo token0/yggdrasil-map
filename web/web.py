@@ -7,6 +7,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--host", type=str, help="host to listen on (default 'localhost')", default="localhost")
 parser.add_argument("--port", type=int, help="port to listen on (default '3000')", default=3000)
 
+APP_VERSION = '2.0'
+
 app = Flask(__name__)
 app.config.from_pyfile('web_config.cfg')
 
@@ -21,7 +23,7 @@ def get_ip():
 
 @app.context_processor
 def add_ip():
-        return dict(ip=get_ip())
+        return dict(ip=get_ip(), version=APP_VERSION)
 
 
 @app.route('/')

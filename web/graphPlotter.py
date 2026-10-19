@@ -32,14 +32,17 @@ def position_nodes(nodes, edges):
     return G
 
 
-def compute_betweenness(G):
+def to_networkx(G):
     ng = nx.Graph()
-    for start in G.iternodes():
-        for other in G.neighbors(start):
-            ng.add_edge(start, other)
+    ng.add_nodes_from(G.nodes())
+    ng.add_edges_from(G.edges())
+    return ng
 
-    # Exact betweenness is O(n*m); sample pivots on large graphs
-    k = None if ng.number_of_nodes() <= 1000 else 500
+
+def compute_betweenness(ng):
+    # Exact betweenness is O(n*m); sample pivots on large graphs. Only used to
+    # size the dots, so a sampled estimate is enough.
+    k = None if ng.number_of_nodes() <= 1000 else 200
     return centrality.betweenness_centrality(ng, k=k, seed=1)
 
 
@@ -61,11 +64,9 @@ def load_db():
 
 
 def get_graph_json(G):
-    max_neighbors = 1
-    for n in G.iternodes():
-        neighbors = len(G.neighbors(n))
-        if neighbors > max_neighbors:
-            max_neighbors = neighbors
+    ng = to_networkx(G)
+    degree = dict(ng.degree())
+    max_neighbors = max([1] + list(degree.values()))
     print('Max neighbors: %d' % max_neighbors)
 
     out_data = {
@@ -74,25 +75,27 @@ def get_graph_json(G):
         'edges': []
     }
 
-    centralities = compute_betweenness(G)
+    centralities = compute_betweenness(ng)
     db = load_db()
 
     for n in G.iternodes():
-        neighbor_ratio = len(G.neighbors(n)) / float(max_neighbors)
-        pos = n.attr['pos'].split(',', 1)
+        attr = n.attr
+        neighbor_ratio = degree.get(n.name, 0) / float(max_neighbors)
+        pos = attr['pos'].split(',', 1)
         centrality = centralities.get(n.name, 0)
         size = 5*(1 + 1*centrality)
         name = db.get(canonalize_ip(n.name))
         # If label isn't the default value, set name to that instead
-        if n.attr['label'] != n.name.split(':')[-1]:
-            name = n.attr['label']
-        height = n.attr.get('height_addr')
+        label = attr['label']
+        if label != n.name.split(':')[-1]:
+            name = label
+        height = attr.get('height_addr')
 
         out_data['nodes'].append({
             'id': n.name,
-            'label': name if name else n.attr['label'],
+            'label': name if name else label,
             'name': name,
-            'coords': n.attr['coords'],
+            'coords': attr['coords'],
             'x': float(pos[0]),
             'y': float(pos[1]),
             'color': _gradient_color(neighbor_ratio, [(100, 100, 100), (0, 0, 0)]),
