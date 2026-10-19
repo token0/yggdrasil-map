@@ -37,24 +37,34 @@ The choice is remembered in the browser.
 
 ## Web server with Docker
 
-The image collects data itself from the local node's admin socket using the
-`lookups` request, which requires `LogLookups: true` in the yggdrasil config.
-It then re-renders every `UPDATE_INTERVAL` seconds.
+The image runs its own yggdrasil node (official release binary) and collects
+data from it with the `lookups` admin request, re-rendering every
+`UPDATE_INTERVAL` seconds.
+
+On first start a config is generated at `/config/yggdrasil.conf` (mode 0600,
+contains the node's private key). It is contained by default:
+
+  * `IfName: none` – no TUN interface, so no 200::/7 address or route exists in
+    any network namespace; the node only talks to its peers over TCP/TLS.
+  * no `Listen` entries and no multicast discovery.
+  * peers taken from `YGG_PEERS`.
+
+The file is yours afterwards (HJSON or JSON) and is never rewritten; the
+container only enforces `LogLookups: true` and its internal admin socket at
+runtime. Note that `lookups` only records lookups that pass through this node,
+so a leaf node sees a small part of the network.
 
 ### Compose (e.g. Dockge)
 Use [`contrib/docker/compose.yaml`](contrib/docker/compose.yaml) together with
 [`contrib/docker/.env.example`](contrib/docker/.env.example) saved as `.env`.
-Compose builds the image directly from the git URL in `MAP_GIT_CONTEXT`, so no
-local checkout is needed.
+The image is built and pushed to `ghcr.io/<owner>/yggdrasil-map` by the
+[`Docker image`](.github/workflows/docker.yml) workflow on every push to
+`master` (tag `latest`) and on `v*` tags; set `MAP_IMAGE` accordingly.
 
-### Plain docker
-From the repository root:
-```bash
-sudo docker build -f contrib/docker/Dockerfile -t yggdrasil-map .
-sudo docker run --name yggdrasil-map -d --restart always \
-  -v /var/run/yggdrasil:/run/yggdrasil:ro -p 127.0.0.1:3000:3000 yggdrasil-map
-```
-
-Environment: `HOST`, `PORT`, `UPDATE_INTERVAL` (default 600),
-`YGG_ADMIN_ENDPOINT` (`unix:///path` or `tcp://host:port`, empty to skip
-collection), `CURRENT_SOURCE` (file or URL to render, default `current`).
+### Environment
+`HOST`, `PORT`, `UPDATE_INTERVAL` (default 600), `YGG_PEERS`,
+`YGG_EMBEDDED` (default 1; 0 to use an external node via `YGG_ADMIN_ENDPOINT`,
+`unix:///path` or `tcp://host:port`), `YGG_CONF` (default
+`/config/yggdrasil.conf`), `YGG_WARMUP` (seconds before the first collection,
+default 60 with the embedded node), `CURRENT_SOURCE` (file or URL to render,
+default `current`).
