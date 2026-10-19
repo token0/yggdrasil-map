@@ -43,6 +43,10 @@ data through it, re-rendering every `UPDATE_INTERVAL` seconds. Two collectors:
   * `crawl` (default, [`scripts/crawl-peers.py`](scripts/crawl-peers.py)) –
     breadth-first crawl with `debug_remoteGetPeers` (+ `getNodeInfo` for names),
     rendering the real peering graph. Works from any position in the tree.
+    A full crawl of a ~10k node network takes on the order of 15 minutes
+    (unanswered requests cost the node's 6 s timeout); partial snapshots are
+    written every `CRAWL_SNAPSHOT` seconds and rendered as they arrive, and
+    progress is logged every `CRAWL_PROGRESS` seconds.
   * `lookups` ([`scripts/getcurrent.py`](scripts/getcurrent.py)) – the original
     spanning-tree view from the node's `lookups` log. Only useful on a hub node:
     lookups travel down the tree towards their target, so a leaf sees almost none.
@@ -68,7 +72,9 @@ The image is built and pushed to `ghcr.io/<owner>/yggdrasil-map` by the
 
 ### Environment
 `HOST`, `PORT`, `UPDATE_INTERVAL` (default 600), `YGG_PEERS`,
-`COLLECTOR` (`crawl` or `lookups`), `CRAWL_CONCURRENCY` (default 16),
+`COLLECTOR` (`crawl` or `lookups`), `CRAWL_CONCURRENCY` (default 32),
+`CRAWL_SNAPSHOT` (default 120), `CRAWL_PROGRESS` (default 30),
+`RENDER_CHECK_INTERVAL` (default 30),
 `CRAWL_MAX_NODES` (default 0 = unlimited), `CRAWL_NODEINFO` (default 1),
 `LAYOUT_PROG` (default neato up to 500 nodes, sfdp above),
 `YGG_EMBEDDED` (default 1; 0 to use an external node via `YGG_ADMIN_ENDPOINT`,

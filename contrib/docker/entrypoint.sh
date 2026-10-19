@@ -13,7 +13,8 @@
 #   COLLECTOR             crawl = peering graph via debug_remoteGetPeers (default),
 #                         lookups = spanning tree from the node's 'lookups' log
 #   CURRENT_SOURCE        crawler output to render (file path or URL), default: current
-#   UPDATE_INTERVAL       seconds between updates, default: 600
+#   UPDATE_INTERVAL       seconds of rest between collections, default: 600
+#   RENDER_CHECK_INTERVAL seconds between checks for new data to render, default: 30
 
 APP_DIR="${APP_DIR:-/src/yggdrasil-map}"
 COLLECTOR="${COLLECTOR:-crawl}"
@@ -43,34 +44,50 @@ fi
 
 cd "$APP_DIR/web" || exit 1
 
-update() {
-    if [ -n "$YGG_ADMIN_ENDPOINT" ]; then
-        case "$COLLECTOR" in
-            lookups) collector="$APP_DIR/scripts/getcurrent.py" ;;
-            *)       collector="$APP_DIR/scripts/crawl-peers.py" ;;
-        esac
-        if python3 "$collector" "$YGG_ADMIN_ENDPOINT" > current.tmp; then
-            mv current.tmp current
-        else
-            rm -f current.tmp
-            echo "update: collection failed, keeping previous data" >&2
-        fi
-    fi
-    if [ -f current ] || [ "$CURRENT_SOURCE" != "${CURRENT_SOURCE#*://}" ]; then
-        python3 updateGraph.py || echo "update: render failed" >&2
-    else
-        echo "update: no data collected yet, skipping render" >&2
-    fi
+collect() {
+    case "$COLLECTOR" in
+        lookups)
+            if python3 "$APP_DIR/scripts/getcurrent.py" "$YGG_ADMIN_ENDPOINT" > current.tmp; then
+                mv current.tmp current
+            else
+                rm -f current.tmp
+                echo "collect: failed, keeping previous data" >&2
+            fi ;;
+        *)
+            # Writes partial snapshots to 'current' while crawling, final result at the end
+            python3 "$APP_DIR/scripts/crawl-peers.py" "$YGG_ADMIN_ENDPOINT" --out current \
+                || echo "collect: crawl failed, keeping previous data" >&2 ;;
+    esac
 }
 
+# Collection loop: one collection, then UPDATE_INTERVAL seconds of rest
+if [ -n "$YGG_ADMIN_ENDPOINT" ]; then
+    (
+        if [ "$YGG_WARMUP" -gt 0 ]; then
+            echo "collect: first collection in $YGG_WARMUP s"
+            sleep "$YGG_WARMUP"
+        fi
+        while true; do
+            collect
+            sleep "$UPDATE_INTERVAL"
+        done
+    ) &
+fi
+
+# Render loop: redraw whenever the collected data is newer than the rendered map
+# (or periodically for a remote CURRENT_SOURCE)
 (
-    if [ "$YGG_WARMUP" -gt 0 ]; then
-        echo "update: first collection in $YGG_WARMUP s"
-        sleep "$YGG_WARMUP"
-    fi
     while true; do
-        update
-        sleep "$UPDATE_INTERVAL"
+        if [ "$CURRENT_SOURCE" != "${CURRENT_SOURCE#*://}" ]; then
+            python3 updateGraph.py || echo "render: failed" >&2
+            sleep "$UPDATE_INTERVAL"
+            continue
+        fi
+        # dash's -nt is false when the second file is missing, so test that separately
+        if [ -f current ] && { [ ! -f static/graph.json ] || [ current -nt static/graph.json ]; }; then
+            python3 updateGraph.py || echo "render: failed" >&2
+        fi
+        sleep "${RENDER_CHECK_INTERVAL:-30}"
     done
 ) &
 
