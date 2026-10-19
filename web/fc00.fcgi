@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 from flup.server.fcgi import WSGIServer
 from web import app

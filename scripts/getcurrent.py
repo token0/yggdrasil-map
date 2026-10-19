@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import json
 import socket
 import sys
@@ -21,18 +22,20 @@ def readall(sock):
   while True:
     try:
       frag = sock.recv(4096)
+      if not frag:
+        break  # peer closed the connection
       data.append(frag)
     except:
       break
-  return "".join(data)
+  return b"".join(data)
 
 
 def doRequest(req):
   try:
     ygg = socket.socket(socktype, socket.SOCK_STREAM)
     ygg.connect(sockaddr)
-    ygg.send(req)
-    data = json.loads(readall(ygg))
+    ygg.sendall(req.encode("utf-8"))
+    data = json.loads(readall(ygg).decode("utf-8"))
     return data
   except:
     return None
@@ -49,9 +52,9 @@ for node in known['response']['infos']:
 #for k,v in selfInfo['response']['self'].iteritems(): rumored[k] = v
 
 # Loop over rumored nodes and ping them, adding to visited if they respond
-print json.dumps({"yggnodes": infos})
+print(json.dumps({"yggnodes": infos}))
 
 # TODO do something with the results
 
-#print visited
-#print timedout
+#print(visited)
+#print(timedout)

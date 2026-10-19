@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import json
 import socket
 import sys
@@ -21,10 +22,12 @@ def readall(sock):
   while True:
     try:
       frag = sock.recv(4096)
+      if not frag:
+        break  # peer closed the connection
       data.append(frag)
     except:
       break
-  return "".join(data)
+  return b"".join(data)
 
 def getPeersRequest(key):
   return '{{"keepalive":true, "request":"debug_remoteGetPeers", "arguments": {{"key":"{}"}}}}'.format(key)
@@ -33,8 +36,8 @@ def doRequest(req):
   try:
     ygg = socket.socket(socktype, socket.SOCK_STREAM)
     ygg.connect(sockaddr)
-    ygg.send(req)
-    data = json.loads(readall(ygg))
+    ygg.sendall(req.encode("utf-8"))
+    data = json.loads(readall(ygg).decode("utf-8"))
     return data
   except:
     return None
@@ -44,13 +47,13 @@ rumored = set() # Add rumors about nodes to ping
 timedout = set()
 
 def handleGetPeersResponse(publicKey, data):
-  global vistied
+  global visited
   global rumored
   global timedout
   if publicKey in visited: return
   #visited.add(publicKey)
   try:
-    ks = data['response'].values()[0]['keys']
+    ks = list(data['response'].values())[0]['keys']
     for k in ks:
       if k in visited: continue
       if k in timedout: continue
@@ -76,7 +79,7 @@ except:
 # Loop over rumored nodes and ping them, adding to visited if they respond
 while len(rumored) > 0:
   for k in rumored:
-    print "DEBUG tested:", len(visited), "remaining:", len(rumored)
+    print("DEBUG tested:", len(visited), "remaining:", len(rumored))
     handleGetPeersResponse(k, doRequest(getPeersRequest(k)))
     break
   rumored.remove(k)
@@ -84,5 +87,5 @@ while len(rumored) > 0:
 
 # TODO do something with the results
 
-#print visited
-#print timedout
+#print(visited)
+#print(timedout)

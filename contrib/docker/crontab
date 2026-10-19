@@ -1,1 +1,1 @@
-*/10 * * * * root cd /src/yggdrasil-map/web/ && python updateGraph.py
+*/10 * * * * root cd /src/yggdrasil-map/web/ && /usr/local/bin/python3 updateGraph.py

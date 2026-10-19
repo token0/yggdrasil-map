@@ -5,6 +5,17 @@
 		Nodes: <span id="number-of-nodes">-</span><br>
 		Links: <span id="number-of-connections">-</span><br>
 		Updated <span id="update-time">-</span><br>
+		<label for="color-mode">Color by</label>
+		<select id="color-mode">
+			<option value="peers">Peer count</option>
+			<option value="height">Address height</option>
+		</select>
+		<div id="height-legend">
+			<span id="height-min">-</span>
+			<span id="height-bar"></span>
+			<span id="height-max">-</span>
+			<span class="height-unknown"></span> unknown
+		</div>
 	</div>
 	
 	<div id="sidebar">

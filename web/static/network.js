@@ -6,6 +6,14 @@ var canvas = null;
 var ctx = null;
 var mapOffset = {x: 0, y: 0};
 var zoom = 1.0;
+var colorMode = 'peers';   // 'peers' (original grey scale) or 'height' (address height)
+var heightRange = {min: 0, max: 0};
+var selectedNode = null;
+
+// Perceptual (viridis-like) stops, low height -> high height
+var HEIGHT_STOPS = [[0x44, 0x01, 0x54], [0x3b, 0x52, 0x8b], [0x21, 0x91, 0x8c], [0x5e, 0xc9, 0x62], [0xfd, 0xe7, 0x25]];
+var HEIGHT_UNKNOWN_COLOR = '#bbbbbb';
+var COLOR_MODE_KEY = 'yggmap.colorMode';
 
 function changeHash(hash) {
     window.location.replace(('' + window.location).split('#')[0] + '#' + hash);
@@ -21,6 +29,15 @@ function drawCircle(ctx, x, y, radius, color) {
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI*2, true);
     ctx.fill();
+}
+
+function drawRing(ctx, x, y, radius, color, width) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI*2, true);
+    ctx.stroke();
+    ctx.lineWidth = 1;
 }
 
 function drawLine(ctx, x1, y1, x2, y2, color) {
@@ -69,6 +86,16 @@ function drawNetwork() {
         drawCircle(ctx, node.x, node.y, node.radius, node.color);
     }
 
+    // In height mode the fill colour carries the height, so mark the
+    // selection and its direct peers with rings instead of recolouring.
+    if (colorMode == 'height' && selectedNode) {
+        for (var i = 0; i < selectedNode.peers.length; ++i) {
+            var p = selectedNode.peers[i];
+            drawRing(ctx, p.x, p.y, p.radius + 1.5, '#e83a09', 1.5);
+        }
+        drawRing(ctx, selectedNode.x, selectedNode.y, selectedNode.radius + 2.5, '#000000', 2.5);
+    }
+
     // Draw labels
     for (var i = 0; i < nodes.length; ++i) {
         var node = nodes[i];
@@ -112,9 +139,10 @@ function clearNodes() {
         var node = nodes[i];
         node.depth = 0xFFFF;
         node.color = node.originalColor;
-        node.textColor = node.color;
+        node.textColor = node.originalTextColor;
         node.selected = false;
     }
+    selectedNode = null;
 }
 
 function selectNode(node, redraw) {
@@ -123,9 +151,11 @@ function selectNode(node, redraw) {
     changeHash(node.id);
 
     node.selected = true;
+    selectedNode = node;
     showNodeInfo(node);
 
-    markPeers(node, 0);
+    if (colorMode != 'height')
+        markPeers(node, 0);
     if (redraw)
         drawNetwork();
 }
@@ -177,6 +207,7 @@ function showNodeInfo(node) {
         '<strong>Coords:</strong> ' + node.coords + '<br>' +
         '<strong>Peers:</strong> ' + node.peers.length + '<br>' +
         '<strong>Centrality:</strong> ' + node.centrality + '<br>' +
+        '<strong>Address height:</strong> ' + (node.height == null ? 'unknown' : node.height) + '<br>' +
         '<table>' +
         // '<tr><td></td><td><strong>Their peers #</strong></td></tr>' +
         peers.map(function (n) {
@@ -199,6 +230,11 @@ function mousePos(e) {
 $(document).ready(function() {
     canvas = document.getElementById('map');
     ctx = canvas.getContext('2d');
+    try {
+        var stored = window.localStorage.getItem(COLOR_MODE_KEY);
+        if (stored == 'peers' || stored == 'height')
+            colorMode = stored;
+    } catch (e) { /* storage unavailable, keep default */ }
     updateCanvasSize();
 
 
@@ -218,9 +254,12 @@ $(document).ready(function() {
             node.peers = [];
             node.depth = 0xFFFF;
             // node.color = '#000';
+            node.peerColor = node.color;
             node.originalColor = node.color;
+            node.originalTextColor = node.color;
             node.textColor = node.color;
         }
+        computeHeightRange();
 
         var newEdges = []
         // Find node references for edges
@@ -258,6 +297,11 @@ $(document).ready(function() {
         $('#number-of-nodes').text(nodes.length);
         $('#number-of-connections').text(edges.length);
 
+
+        $('#color-mode').val(colorMode).change(function() {
+            setColorMode($(this).val());
+        });
+        applyColorMode();
 
         if (window.location.hash) {
             var id = window.location.hash.substring(1);
@@ -423,4 +467,74 @@ function nodeMouseIn(node) {
 function nodeMouseOut(node) {
     node.hover = false;
     $('body').css('cursor', 'auto');
+}
+
+function computeHeightRange() {
+    var min = Infinity, max = -Infinity;
+    for (var i = 0; i < nodes.length; ++i) {
+        var h = nodes[i].height;
+        if (h == null) continue;
+        if (h < min) min = h;
+        if (h > max) max = h;
+    }
+    if (min === Infinity) { min = 0; max = 0; }
+    heightRange = {min: min, max: max};
+    $('#height-min').text(min);
+    $('#height-max').text(max);
+}
+
+function heightToRgb(h) {
+    var span = heightRange.max - heightRange.min;
+    var t = span > 0 ? (h - heightRange.min) / span : 0;
+    var seg = t * (HEIGHT_STOPS.length - 1);
+    var idx = Math.min(Math.floor(seg), HEIGHT_STOPS.length - 2);
+    var f = seg - idx;
+    var a = HEIGHT_STOPS[idx], b = HEIGHT_STOPS[idx + 1];
+    return [0, 1, 2].map(function(c) { return Math.round(a[c] + (b[c] - a[c]) * f); });
+}
+
+function rgbToHex(rgb) {
+    return '#' + rgb.map(function(c) { return ('0' + c.toString(16)).slice(-2); }).join('');
+}
+
+function applyColorMode() {
+    for (var i = 0; i < nodes.length; ++i) {
+        var node = nodes[i];
+        if (colorMode == 'height') {
+            if (node.height == null) {
+                node.originalColor = HEIGHT_UNKNOWN_COLOR;
+                node.originalTextColor = '#777777';
+            } else {
+                var rgb = heightToRgb(node.height);
+                node.originalColor = rgbToHex(rgb);
+                // Darken label text so light (high) colours stay readable
+                node.originalTextColor = rgbToHex(rgb.map(function(c) { return Math.round(c * 0.55); }));
+            }
+        } else {
+            node.originalColor = node.peerColor;
+            node.originalTextColor = node.peerColor;
+        }
+    }
+    $('#height-legend').toggle(colorMode == 'height');
+
+    if (selectedNode) {
+        // Re-apply selection so peer-depth colouring matches the new mode
+        var sel = selectedNode;
+        clearNodes();
+        selectNode(sel, false);
+    } else {
+        for (var i = 0; i < nodes.length; ++i) {
+            nodes[i].color = nodes[i].originalColor;
+            nodes[i].textColor = nodes[i].originalTextColor;
+        }
+    }
+}
+
+function setColorMode(mode) {
+    colorMode = mode;
+    try {
+        window.localStorage.setItem(COLOR_MODE_KEY, mode);
+    } catch (e) { /* storage unavailable, mode just won't persist */ }
+    applyColorMode();
+    drawNetwork();
 }

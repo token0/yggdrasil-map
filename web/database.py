@@ -40,7 +40,7 @@ class NodeDB:
                                 now))
 
     def insert_graph(self, nodes, edges, uploaded_by):
-        for n in nodes.itervalues():
+        for n in nodes.values():
             self.insert_node(n)
 
         for e in edges:

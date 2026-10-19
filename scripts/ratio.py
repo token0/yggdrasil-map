@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python3
 
 import json
 
@@ -10,7 +10,7 @@ results = dict()
 for kind in kinds:
   results[kind] = dict()
 
-for k,v in data["yggnodes"].iteritems():
+for k,v in data["yggnodes"].items():
   for kind in kinds:
     if kind not in v: continue
     num = len(v[kind])
@@ -24,10 +24,10 @@ for k,v in data["yggnodes"].iteritems():
 
 import matplotlib.pyplot as plt
 fig, axs = plt.subplots(1, len(kinds), sharey=True, tight_layout=True)
-for kdx in xrange(len(kinds)):
+for kdx in range(len(kinds)):
   kind = kinds[kdx]
   bins = []
-  for num,count in results[kind].iteritems():
+  for num,count in results[kind].items():
     bins += [num]*count
   nbins = max(results[kind].keys())+1
   axs[kdx].set_title(kind)
@@ -39,5 +39,5 @@ plt.savefig("fig.svg")
 plt.yscale('log')
 plt.savefig("fig-logy.svg")
 
-print results
+print(results)
 

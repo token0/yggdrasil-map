@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from flask import Flask, render_template, request
 from graphData import insert_graph_data
 
@@ -34,7 +35,7 @@ def page_about():
 
 @app.route('/sendGraph', methods=['POST'])
 def page_sendGraph():
-    print "Receiving graph from %s" % (request.remote_addr)
+    print("Receiving graph from %s" % (request.remote_addr))
     
     data = request.form['data']
     mail = request.form.get('mail', 'none')

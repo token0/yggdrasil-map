@@ -43,7 +43,7 @@ def insert_graph_data(config, data, mail, ip, version):
     except Exception:
         return 'Invalid JSON nodes'
 
-    print "Accepted %d nodes and %d links." % (len(nodes), len(edges))
+    print("Accepted %d nodes and %d links." % (len(nodes), len(edges)))
 
     if len(nodes) == 0 or len(edges) == 0:
         return 'No valid nodes or edges'

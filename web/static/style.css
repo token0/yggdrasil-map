@@ -77,6 +77,35 @@ li {
 	z-index: 999;
 }
 
+#color-mode {
+	font-size: 10px;
+	margin-top: 4px;
+}
+
+#height-legend {
+	display: none;
+	margin-top: 4px;
+	white-space: nowrap;
+}
+
+#height-bar {
+	display: inline-block;
+	width: 120px;
+	height: 8px;
+	vertical-align: middle;
+	background: linear-gradient(to right, #440154, #3b528b, #21918c, #5ec962, #fde725);
+}
+
+.height-unknown {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	margin-left: 8px;
+	vertical-align: middle;
+	border-radius: 50%;
+	background: #bbbbbb;
+}
+
 
 #sidebar {
 	padding: 20px 20px;
