@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.3.0
+
+### Changed
+- Sharp map: canvases render at the device pixel ratio (up to 3x) from the
+  start, with an exact backing-store scale (no resampling); only a redraw
+  slower than 150 ms steps the resolution down. Small dots are drawn as
+  circles unless they are under 3 device pixels. Touch devices use a 10%
+  margin around the screen (was 25%) to keep the redraw cheap.
+- Maps over 500 nodes use a cluster layout: the backbone tree's skeleton
+  (non-leaf nodes, ~25%) is laid out with sfdp, every skeleton node gets a
+  disk sized for its leaves, overlapping disks are pushed apart, and leaves
+  sit on concentric rings around their parent one spacing apart. No two dots
+  share a spot any more (minimum distance 0.99 leaf spacings on a 10k-node
+  map, was 0.02), and hubs' inner rings start outside their own dot. The
+  layout is deterministic across renders.
+- Height mode: height 0 (about half of all nodes) is drawn smaller and dimmer
+  so the other heights stand out.
+
+### Added
+- Back button and Escape cancel the open view (selected node, expanded
+  sheet, search) instead of leaving the page; with nothing open, back works
+  as usual. Deep links (#address) still open the node.
+
+
 ## 2.2.1
 
 ### Changed

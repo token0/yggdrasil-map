@@ -26,10 +26,12 @@ Use `--host`/`--port` to adjust the address/port the server listens on (default 
 
 Run `web/updateGraph.py` periodically to rerender nodes graph. It reads crawler output from `web/current` (a local path or URL, see `url` in `updateGraph.py`). You may want to customize reverse-proxy IP retrieval logic in web.py.
 
-### Map view (v2.2)
+### Map view (v2.3)
 
   * Initial view: a backbone tree computed from the peer graph (one link per
-    node, breadth-first from the best-connected node). Selecting a node shows
+    node, breadth-first from the best-connected node). On maps over 500 nodes
+    each node's leaves are placed on rings around it, so every peer stays
+    distinguishable when zoomed in. Selecting a node shows
     all its peer links, and its peers' links faintly (capped at 3000).
   * Dot size follows the peer count and grows when zooming in; colour follows
     peer count or address height (classes 0, 1, 2, 3, 4, 5–7, 8–11, 12+).
@@ -40,7 +42,9 @@ Run `web/updateGraph.py` periodically to rerender nodes graph. It reads crawler 
   * Pinch and drag move and zoom the map itself, never the page. On narrow
     screens node details live in a bottom sheet with a drag handle.
   * Touch devices, and desktops whose OS prefers dark mode, get a pitch-black
-    theme.
+    theme. The map renders at the screen's full resolution.
+  * The back button (or Escape) closes the selected node / expanded panel
+    instead of leaving the page.
   * `/bench` times the renderer variants on the current device.
 
 ### Data files

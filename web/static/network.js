@@ -25,9 +25,12 @@ var dataCreated = 0;
 var wrapper, layer, baseCanvas, overlayCanvas, baseCtx, overlayCtx;
 var vw = 0, vh = 0;         // viewport (CSS px)
 var mx = 0, my = 0;         // layer margin beyond the viewport (CSS px)
-var MARGIN = 0.25;          // margin as a fraction of the viewport size
-var dpr = 1;
-var dprLocked = false;      // set once the adaptive resolution has been decided
+var MARGIN = 0.25;          // margin as a fraction of the viewport size (0.1 on touch devices)
+var dpr = 1;                // device pixels per CSS pixel the canvases are rendered at
+var sx = 1, sy = 1;         // exact backing-store scale (canvas pixels / CSS pixels)
+var DPR_MAX = 3;
+var SLOW_RENDER_MS = 150;   // a full redraw slower than this lowers the resolution
+var dprLocked = false;      // set once the resolution has been confirmed
 
 // View transform: screen = world * view.s + (view.tx, view.ty), screen in CSS
 // px relative to the viewport. renderedView is the view the bitmaps show.
@@ -63,13 +66,16 @@ var COLOR_MODE_KEY = 'yggmap.colorMode';
 var DARK_QUERY = '(pointer: coarse), (prefers-color-scheme: dark)';
 var SHEET_QUERY = '(max-width: 700px)';
 
-// Address height classes. Every colour has >= 3.9:1 contrast against its
+// Address height classes. Classes 1+ have >= 3.9:1 contrast against their
 // theme background (WCAG) and the closest two colours are >= 18 CIEDE2000
-// apart (23 on black), so neighbouring classes are clearly distinct.
+// apart (23 on black); class 0 is intentionally low-contrast (see below).
 var HEIGHT_CLASSES = [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 7], [8, 11], [12, 255]];
 var HEIGHT_CLASS_LABELS = ['0', '1', '2', '3', '4', '5–7', '8–11', '12+'];
-var HEIGHT_COLORS_DARK  = ['#8A8A8A', '#4F8CFF', '#16D4E8', '#3DDC6A', '#F0E442', '#FF9922', '#FF4F79', '#C77DFF'];
-var HEIGHT_COLORS_LIGHT = ['#7A7A7A', '#1F5FD6', '#00818F', '#178A3E', '#8C7A00', '#C25E00', '#D11A4A', '#8A3FD1'];
+// Height 0 (about half of all nodes) is deliberately dim and drawn smaller
+// (HEIGHT0_SCALE), so the rarer, interesting heights stand out.
+var HEIGHT0_SCALE = 0.65;
+var HEIGHT_COLORS_DARK  = ['#4D4D4D', '#4F8CFF', '#16D4E8', '#3DDC6A', '#F0E442', '#FF9922', '#FF4F79', '#C77DFF'];
+var HEIGHT_COLORS_LIGHT = ['#BDBDBD', '#1F5FD6', '#00818F', '#178A3E', '#8C7A00', '#C25E00', '#D11A4A', '#8A3FD1'];
 
 // Hop-distance colours used when a node is selected in peer-count mode
 var DEPTH_COLORS = ['#000000', '#096EE8', '#09E8B8', '#36E809', '#ADE809', '#E8B809', '#E87509', '#E83A09', '#E86946', '#E8AC9B', '#E8C9C1'];
@@ -167,8 +173,10 @@ function buildLegend() {
 
 function resizeLayers() {
     var rect = wrapper.getBoundingClientRect();
-    vw = rect.width;
-    vh = rect.height;
+    vw = Math.round(rect.width);
+    vh = Math.round(rect.height);
+    // A smaller margin on touch devices keeps the redraw after a gesture cheap
+    MARGIN = window.matchMedia('(pointer: coarse)').matches ? 0.1 : 0.25;
     mx = Math.round(vw * MARGIN);
     my = Math.round(vh * MARGIN);
     layer.style.left = -mx + 'px';
@@ -181,9 +189,14 @@ function resizeLayers() {
 }
 
 function setCanvasResolution() {
-    var w = Math.round((vw + 2 * mx) * dpr), h = Math.round((vh + 2 * my) * dpr);
+    var cw = vw + 2 * mx, ch = vh + 2 * my;
+    var w = Math.max(1, Math.round(cw * dpr)), h = Math.max(1, Math.round(ch * dpr));
     baseCanvas.width = overlayCanvas.width = w;
     baseCanvas.height = overlayCanvas.height = h;
+    // Use the exact ratio of the rounded backing size, so canvas pixels map
+    // 1:1 onto device pixels and nothing gets resampled (blurred)
+    sx = w / cw;
+    sy = h / ch;
 }
 
 // Radius on screen at view scale s.
@@ -194,10 +207,10 @@ function radiusAt(n, s) {
     var rSmall = Math.max(n.size * s / BASE_SCALE, 1.2 + (n.size - 2) * 0.3);
     var k = s / refScale;
     if (k <= 1)
-        return Math.min(R_MAX, rSmall);
+        return Math.min(R_MAX, rSmall) * (n.k || 1);
     var rLarge = R0 * n.sf * Math.pow(k, SIZE_EXP);
     var t = Math.min(1, Math.log(k) / Math.log(4));
-    return Math.max(R_MIN * 0.8, Math.min(R_MAX, rSmall + (rLarge - rSmall) * t));
+    return Math.max(R_MIN * 0.8, Math.min(R_MAX, rSmall + (rLarge - rSmall) * t)) * (n.k || 1);
 }
 
 // Reference sizes, fixed at load: R0 follows the average spacing between
@@ -227,7 +240,7 @@ function project() {
 }
 
 function prepareCtx(ctx) {
-    ctx.setTransform(dpr, 0, 0, dpr, mx * dpr, my * dpr);
+    ctx.setTransform(sx, 0, 0, sy, mx * sx, my * sy);
     ctx.clearRect(-mx, -my, vw + 2 * mx, vh + 2 * my);
 }
 
@@ -319,7 +332,8 @@ function drawBase() {
         var key = n.color + (n.dim ? '|d' : '');
         if (n.hollow) {
             hollow.push(n);
-        } else if (n.r < 2.5) {
+        } else if (n.r * dpr < 3) {
+            // Under 3 device pixels a square looks the same as a circle
             (squares[key] || (squares[key] = [])).push(n);
         } else {
             (circles[key] || (circles[key] = [])).push(n);
@@ -448,21 +462,20 @@ function render() {
     adaptResolution(ms);
 }
 
-// Adaptive HiDPI: start at 1x; use the device resolution (max 2x) only if a
-// full redraw is fast here, and fall back to 1x if it turns out slow.
+// Resolution: render at the device's pixel ratio (up to 3x) for a sharp map.
+// The full redraw only happens once per gesture, so it may take a while; only
+// if it is really slow (> SLOW_RENDER_MS) step the resolution down.
+function initialDpr() {
+    return Math.max(1, Math.min(window.devicePixelRatio || 1, DPR_MAX));
+}
+
 function adaptResolution(ms) {
     if (dprLocked)
         return;
-    var device = Math.min(window.devicePixelRatio || 1, 2);
-    if (dpr == 1 && device > 1 && ms < 25) {
-        dpr = device;
+    if (ms > SLOW_RENDER_MS && dpr > 1) {
+        dpr = Math.max(1, Math.round(dpr * 0.7 * 100) / 100);
         setCanvasResolution();
-        requestRender();
-    } else if (dpr > 1 && ms > 70) {
-        dpr = 1;
-        dprLocked = true;
-        setCanvasResolution();
-        requestRender();
+        requestRender();     // measured again at the lower resolution
     } else {
         dprLocked = true;
     }
@@ -632,8 +645,67 @@ function peersOf(n) {
     return linksLoaded ? fullAdj[n.i] : treeAdj[n.i];
 }
 
+// Back button / Escape: while a view is open (a selected node, the expanded
+// bottom sheet, or the search), one extra history entry exists. Going back
+// cancels the view instead of leaving the page; when the view is closed from
+// the page itself, that entry is consumed again, so history never grows.
+var historyArmed = false, consumingHistory = false, historyReady = false;
+
 function changeHash(hash) {
-    window.location.replace(('' + window.location).split('#')[0] + '#' + hash);
+    var url = location.pathname + location.search + (hash ? '#' + hash : '');
+    history.replaceState(history.state, '', url);
+}
+
+function isViewOpen() {
+    return !!selectedNode ||
+        (isSheetLayout() && sheetState != 'collapsed') ||
+        document.activeElement === document.getElementById('search-box');
+}
+
+function syncHistory() {
+    var open = isViewOpen();
+    if (open && !historyArmed) {
+        // The entry underneath is the map with nothing open: no hash
+        var url = location.href;
+        history.replaceState(history.state, '', location.pathname + location.search);
+        history.pushState({yggView: true}, '', url);
+        historyArmed = true;
+    } else if (!open && historyArmed) {
+        historyArmed = false;
+        consumingHistory = true;
+        history.back();
+    }
+}
+
+function cancelView() {
+    var box = $('#search-box');
+    try { box.autocomplete().hide(); } catch (e) { /* not initialised yet */ }
+    box.blur();
+    clearSelection();
+    setSheet('collapsed');
+}
+
+function initHistory() {
+    window.addEventListener('popstate', function() {
+        if (consumingHistory) {
+            consumingHistory = false;
+            return;
+        }
+        if (historyArmed) {
+            historyArmed = false;
+            cancelView();
+        }
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key != 'Escape' && e.key != 'Esc') return;
+        if (historyArmed) history.back();   // popstate cancels the view
+        else cancelView();
+        e.preventDefault();
+    });
+    $('#search-box').on('focus blur', function() {
+        // Let the autocomplete finish a selection before deciding
+        setTimeout(syncHistory, 0);
+    });
 }
 
 function searchNode(id) {
@@ -654,6 +726,7 @@ function applyColorMode() {
     for (var i = 0; i < nodes.length; ++i) {
         var n = nodes[i];
         n.hollow = false;
+        n.k = colorMode == 'height' && n.height === 0 ? HEIGHT0_SCALE : 1;
         if (colorMode == 'height') {
             var c = heightColor(n.height);
             if (c == null) {
@@ -835,6 +908,7 @@ function clearSelection() {
     } else {
         requestOverlay();
     }
+    syncHistory();
 }
 
 function selectNode(node, center) {
@@ -860,6 +934,7 @@ function selectNode(node, center) {
         requestRender();
     else
         requestOverlay();
+    syncHistory();
 }
 
 // Address with its height byte (last two hex digits of the first group)
@@ -941,6 +1016,7 @@ function setSheet(state) {
     if (!isSheetLayout()) return;
     sheetState = state;
     setSheetHeight(sheetHeights()[state]);
+    if (historyReady) syncHistory();
 }
 
 function initSheet() {
@@ -1207,9 +1283,12 @@ $(document).ready(function() {
     } catch (e) { /* storage unavailable, keep default */ }
 
     readTheme();
+    dpr = initialDpr();
     resizeLayers();
     initSheet();
     initInput();
+    initHistory();
+    historyReady = true;
 
     $(window).resize(function() {
         resizeLayers();
